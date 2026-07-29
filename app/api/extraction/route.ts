@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { extraireFaits, type SourceExtraction } from "@/lib/extraction/client";
-import type { Faits } from "@/lib/schema/offre";
 
 export const runtime = "nodejs"; // Buffer + SDK Anthropic
 export const maxDuration = 60; // l'extraction peut prendre ~15 s
@@ -62,50 +61,63 @@ export async function POST(request: NextRequest) {
     source = { kind: "image", mediaType, base64: buf.toString("base64") };
   }
 
-  let faits: Faits;
+  const base = (offre.extraction_brute as Record<string, unknown> | null) ?? {};
+
+  let resultat;
   try {
-    faits = await extraireFaits(source);
+    resultat = await extraireFaits(source);
   } catch (e) {
-    // Aucune relance : on remonte l'erreur à l'opérateur.
+    // Erreur inattendue (réseau, API). Aucune relance.
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Extraction échouée." },
       { status: 422 },
     );
   }
 
+  // Document illisible ou faits incohérents : on stocke l'erreur dans
+  // extraction_brute.extraction (sans écraser composition) et on l'affiche.
+  if (!resultat.ok) {
+    await supabase
+      .from("offres")
+      .update({ extraction_brute: { ...base, extraction: { erreur: resultat.erreur } } })
+      .eq("id", offreId);
+    return NextResponse.json({ error: resultat.erreur }, { status: 422 });
+  }
+
+  const faits = resultat.faits;
+
   // extraction_brute : objet à deux clés { extraction, composition }. On n'écrase
   // jamais la clé composition. On mappe la formule principale + les champs communs
   // vers les colonnes de offres ; le reste (formule_secondaire, suppléments, notes,
   // listes) reste dans extraction_brute.extraction pour la phase 3.
-  const extractionBrute = {
-    ...((offre.extraction_brute as Record<string, unknown> | null) ?? {}),
-    extraction: faits,
-  };
+  const extractionBrute = { ...base, extraction: faits };
 
+  // Les faits absents sont undefined (schéma .optional()). On pose un null explicite
+  // en colonne (?? null) pour ne pas laisser de valeur périmée sur une ré-extraction.
+  // Exceptions devise / aeroport_depart : on laisse undefined (champ non envoyé dans
+  // l'UPDATE) pour PRÉSERVER les défauts DB 'CAD' / 'YUL'.
   const maj: Record<string, unknown> = {
-    type_produit: faits.type_produit,
-    fournisseur: faits.fournisseur,
-    destination_pays: faits.destination_pays,
-    destination_ville: faits.destination_ville,
+    type_produit: faits.type_produit ?? null,
+    fournisseur: faits.fournisseur ?? null,
+    destination_pays: faits.destination_pays ?? null,
+    destination_ville: faits.destination_ville ?? null,
     date_depart: faits.date_depart,
-    date_retour: faits.date_retour,
-    duree_nuits: faits.duree_nuits,
-    duree_jours: faits.duree_jours,
+    date_retour: faits.date_retour ?? null,
+    duree_nuits: faits.duree_nuits ?? null,
+    duree_jours: faits.duree_jours ?? null,
     prix_par_personne: faits.prix_par_personne,
-    occupation: faits.occupation,
-    taxes_incluses: faits.taxes_incluses,
-    prix_valide_jusqua: faits.prix_valide_jusqua,
-    compagnie_aerienne: faits.compagnie_aerienne,
-    aeroports_alternatifs: faits.aeroports_alternatifs,
-    etablissement_nom: faits.etablissement_nom,
-    etablissement_type: faits.etablissement_type,
-    etablissement_categorie: faits.etablissement_categorie,
-    type_cabine: faits.type_cabine,
-    lien_reservation: faits.lien_reservation,
-    lien_tripadvisor: faits.lien_tripadvisor,
-    lien_monarc: faits.lien_monarc,
-    // Préserver les défauts DB ('CAD' / 'YUL') quand l'extraction ne fournit rien :
-    // une valeur undefined n'est pas envoyée dans l'UPDATE.
+    occupation: faits.occupation ?? null,
+    taxes_incluses: faits.taxes_incluses ?? null,
+    prix_valide_jusqua: faits.prix_valide_jusqua ?? null,
+    compagnie_aerienne: faits.compagnie_aerienne ?? null,
+    aeroports_alternatifs: faits.aeroports_alternatifs ?? null,
+    etablissement_nom: faits.etablissement_nom ?? null,
+    etablissement_type: faits.etablissement_type ?? null,
+    etablissement_categorie: faits.etablissement_categorie ?? null,
+    type_cabine: faits.type_cabine ?? null,
+    lien_reservation: faits.lien_reservation ?? null,
+    lien_tripadvisor: faits.lien_tripadvisor ?? null,
+    lien_monarc: faits.lien_monarc ?? null,
     devise: faits.devise ?? undefined,
     aeroport_depart: faits.aeroport_depart ?? undefined,
     extraction_brute: extractionBrute,
