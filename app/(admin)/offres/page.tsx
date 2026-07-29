@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { Button } from "@/components/ui/button";
 
 type OffreListe = {
   id: string;
@@ -19,7 +21,12 @@ export default async function OffresPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-xl font-semibold">Offres</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Offres</h1>
+        <Button asChild size="sm">
+          <Link href="/offres/nouvelle">Nouvelle offre</Link>
+        </Button>
+      </div>
 
       {error && (
         <p className="text-sm text-red-600">
@@ -36,12 +43,14 @@ export default async function OffresPage() {
       {offres && offres.length > 0 && (
         <ul className="flex flex-col divide-y border rounded-md">
           {offres.map((offre) => (
-            <li
-              key={offre.id}
-              className="flex items-center justify-between px-4 py-3 text-sm"
-            >
-              <span>{offre.destination_pays ?? offre.slug}</span>
-              <span className="text-muted-foreground">{offre.statut}</span>
+            <li key={offre.id}>
+              <Link
+                href={`/offres/${offre.id}`}
+                className="flex items-center justify-between px-4 py-3 text-sm hover:bg-muted"
+              >
+                <span>{offre.destination_pays ?? offre.slug}</span>
+                <span className="text-muted-foreground">{offre.statut}</span>
+              </Link>
             </li>
           ))}
         </ul>
