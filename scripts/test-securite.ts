@@ -77,6 +77,7 @@ async function nettoyer() {
 }
 
 async function main() {
+  let userAccidentel: string | null = null;
   try {
     // Nettoyage préalable (résidus d'un run précédent) puis mise en place.
     await nettoyer();
@@ -177,7 +178,36 @@ async function main() {
           (pho.error ? ` [erreur: ${pho.error.message}]` : ""),
       );
     }
+
+    // ── TEST 6 — Inscription publique refusée ─────────────────────────
+    // Le seul réglage critique qui vit hors du dépôt (Dashboard). S'il est
+    // réactivé par accident, n'importe quel visiteur peut se créer un compte
+    // et hériter de « authentifié = accès complet ».
+    {
+      const courriel = `${PREFIXE}${Date.now()}@example.invalid`;
+      const motDePasse = "ZzTest-" + Math.random().toString(36).slice(2, 12);
+      const { data, error } = await anon.auth.signUp({
+        email: courriel,
+        password: motDePasse,
+      });
+      if (!error && data?.user) userAccidentel = data.user.id;
+      const pass = !!error;
+      report(
+        "TEST 6 — Inscription publique refusée",
+        pass,
+        error
+          ? `refus : ${error.message}`
+          : "CRITIQUE : signUp anon a CRÉÉ un compte — l'inscription publique est OUVERTE (compte supprimé en nettoyage).",
+      );
+    }
   } finally {
+    if (userAccidentel) {
+      await service.auth.admin.deleteUser(userAccidentel).catch(() => {});
+      console.log(
+        "\n⚠️  ALERTE SÉCURITÉ : un compte a été créé par signUp anon puis supprimé.\n" +
+          "    « Allow new users to sign up » DOIT être décoché dans le Dashboard — vérifie-le IMMÉDIATEMENT.",
+      );
+    }
     await nettoyer();
   }
 }
@@ -186,7 +216,7 @@ main()
   .then(() => {
     console.log(
       echecs === 0
-        ? "\n✔ Les 5 tests sont au vert."
+        ? "\n✔ Les 6 tests de sécurité sont au vert."
         : `\n✖ ${echecs} test(s) en échec.`,
     );
     process.exit(echecs === 0 ? 0 : 1);
