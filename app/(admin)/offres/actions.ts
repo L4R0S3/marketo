@@ -3,11 +3,11 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { detecterType } from "@/lib/fichiers/validerType";
 
 // undefined = succès (l'action redirige ou revalide) ; { error } = échec affiché.
 type Resultat = { error: string } | undefined;
 
-const TYPES_IMAGE = ["image/png", "image/jpeg", "image/webp"];
 const MAX_IMAGE = 10 * 1024 * 1024; // 10 Mo
 const MAX_PDF = 20 * 1024 * 1024; // 20 Mo
 const TIMEOUT_URL = 15_000; // 15 s
@@ -26,14 +26,15 @@ export async function creerOffreDepuisFichier(
   if (!(file instanceof File) || file.size === 0)
     return { error: "Aucun fichier reçu." };
 
-  const estImage = TYPES_IMAGE.includes(file.type);
-  const estPdf = file.type === "application/pdf";
-  if (!estImage && !estPdf)
-    return { error: "Type non accepté (PNG, JPG, WEBP ou PDF)." };
-  if (estImage && file.size > MAX_IMAGE)
+  // Taille : file.size = octets réellement reçus (fiable, non déclaratif).
+  if (file.size > MAX_PDF) return { error: "Fichier trop lourd (max 20 Mo)." };
+
+  // Type : détecté par signature binaire, PAS par le MIME déclaré (spoofable).
+  const buf = Buffer.from(await file.arrayBuffer());
+  const detecte = detecterType(buf);
+  if (!detecte) return { error: "Type non reconnu (PNG, JPG, WEBP ou PDF)." };
+  if (detecte.estImage && file.size > MAX_IMAGE)
     return { error: "Image trop lourde (max 10 Mo)." };
-  if (estPdf && file.size > MAX_PDF)
-    return { error: "PDF trop lourd (max 20 Mo)." };
 
   const supabase = await createClient();
   const {
@@ -43,19 +44,26 @@ export async function creerOffreDepuisFichier(
 
   const offreId = crypto.randomUUID();
   const chemin = `${offreId}/${Date.now()}-${nomSur(file.name)}`;
-  const buf = Buffer.from(await file.arrayBuffer());
 
-  const up = await supabase.storage
-    .from("documents")
-    .upload(chemin, buf, { contentType: file.type, upsert: false });
-  if (up.error) return { error: `Téléversement échoué : ${up.error.message}` };
-
+  // INSERT d'abord : un échec laisse au pire une ligne visible et supprimable
+  // (via le bouton existant), jamais un fichier orphelin introuvable.
   const ins = await supabase
     .from("offres")
     .insert({ id: offreId, statut: "brouillon", source_fichier_url: chemin });
-  if (ins.error) {
-    await supabase.storage.from("documents").remove([chemin]); // rollback
-    return { error: `Création échouée : ${ins.error.message}` };
+  if (ins.error) return { error: `Création échouée : ${ins.error.message}` };
+
+  // UPLOAD ensuite ; sur erreur retournée OU exception levée, on nettoie la ligne.
+  try {
+    const up = await supabase.storage
+      .from("documents")
+      .upload(chemin, buf, { contentType: detecte.mime, upsert: false });
+    if (up.error) throw new Error(up.error.message);
+  } catch (e) {
+    await supabase.from("offres").delete().eq("id", offreId);
+    await supabase.storage.from("documents").remove([chemin]); // au cas où l'objet a été créé
+    return {
+      error: `Téléversement échoué : ${e instanceof Error ? e.message : "erreur inconnue"}`,
+    };
   }
 
   revalidatePath("/offres");
@@ -99,23 +107,30 @@ export async function creerOffreDepuisUrl(formData: FormData): Promise<Resultat>
 
   const offreId = crypto.randomUUID();
   const chemin = `${offreId}/${Date.now()}-page.html`;
-  const up = await supabase.storage
-    .from("documents")
-    .upload(chemin, Buffer.from(html, "utf8"), {
-      contentType: "text/html; charset=utf-8",
-      upsert: false,
-    });
-  if (up.error) return { error: `Stockage échoué : ${up.error.message}` };
 
+  // INSERT d'abord (même logique anti-orphelin que le dépôt de fichier).
   const ins = await supabase.from("offres").insert({
     id: offreId,
     statut: "brouillon",
     source_url: url.toString(),
     source_fichier_url: chemin,
   });
-  if (ins.error) {
-    await supabase.storage.from("documents").remove([chemin]); // rollback
-    return { error: `Création échouée : ${ins.error.message}` };
+  if (ins.error) return { error: `Création échouée : ${ins.error.message}` };
+
+  try {
+    const up = await supabase.storage
+      .from("documents")
+      .upload(chemin, Buffer.from(html, "utf8"), {
+        contentType: "text/html; charset=utf-8",
+        upsert: false,
+      });
+    if (up.error) throw new Error(up.error.message);
+  } catch (e) {
+    await supabase.from("offres").delete().eq("id", offreId);
+    await supabase.storage.from("documents").remove([chemin]);
+    return {
+      error: `Stockage échoué : ${e instanceof Error ? e.message : "erreur inconnue"}`,
+    };
   }
 
   revalidatePath("/offres");
@@ -180,25 +195,40 @@ export async function televerserPhotos(formData: FormData): Promise<Resultat> {
   let ordre = derniere && derniere.length ? (derniere[0].ordre ?? 0) + 1 : 0;
 
   for (const f of fichiers) {
-    if (!TYPES_IMAGE.includes(f.type))
-      return { error: `Photo « ${f.name} » : type non accepté (PNG, JPG, WEBP).` };
     if (f.size > MAX_IMAGE)
       return { error: `Photo « ${f.name} » : trop lourde (max 10 Mo).` };
 
-    const chemin = `${offreId}/${Date.now()}-${nomSur(f.name)}`;
+    // Type par signature binaire ; images uniquement pour ce bucket.
     const buf = Buffer.from(await f.arrayBuffer());
-    const up = await supabase.storage
-      .from("photos")
-      .upload(chemin, buf, { contentType: f.type, upsert: false });
-    if (up.error)
-      return { error: `Téléversement de « ${f.name} » échoué : ${up.error.message}` };
+    const detecte = detecterType(buf);
+    if (!detecte || !detecte.estImage)
+      return { error: `Photo « ${f.name} » : type non accepté (PNG, JPG, WEBP).` };
 
+    const chemin = `${offreId}/${Date.now()}-${nomSur(f.name)}`;
+
+    // INSERT d'abord, UPLOAD ensuite : pas de fichier orphelin dans le bucket
+    // public si l'enregistrement échoue.
     const ins = await supabase
       .from("photos")
-      .insert({ offre_id: offreId, url: chemin, ordre, role: "galerie" });
-    if (ins.error) {
-      await supabase.storage.from("photos").remove([chemin]); // rollback
-      return { error: `Enregistrement échoué : ${ins.error.message}` };
+      .insert({ offre_id: offreId, url: chemin, ordre, role: "galerie" })
+      .select("id")
+      .single();
+    if (ins.error || !ins.data)
+      return {
+        error: `Enregistrement de « ${f.name} » échoué : ${ins.error?.message ?? "inconnu"}`,
+      };
+
+    try {
+      const up = await supabase.storage
+        .from("photos")
+        .upload(chemin, buf, { contentType: detecte.mime, upsert: false });
+      if (up.error) throw new Error(up.error.message);
+    } catch (e) {
+      await supabase.from("photos").delete().eq("id", ins.data.id);
+      await supabase.storage.from("photos").remove([chemin]);
+      return {
+        error: `Téléversement de « ${f.name} » échoué : ${e instanceof Error ? e.message : "inconnu"}`,
+      };
     }
     ordre++;
   }
