@@ -2,6 +2,10 @@
 
 > Ce fichier est la source de vérité du projet. Sauvegarde-le à la racine du dépôt
 > sous le nom `CLAUDE.md` pour que Claude Code le lise automatiquement à chaque session.
+>
+> **`CLAUDE.md` fait autorité** sur toute la spec du projet. `AGENTS.md` (généré par le
+> scaffold Next 16) n'est qu'un **pointeur** vers la doc locale de Next 16
+> (`node_modules/next/dist/docs/`) ; en cas de divergence, `CLAUDE.md` prime.
 
 ---
 
@@ -194,8 +198,20 @@ après coup obligerait à retoucher chaque gabarit.
 }
 ```
 
-**`slug`** est généré à partir du titre, unique, immuable une fois l'offre publiée.
-Une landing page dont l'URL change est une landing page perdue.
+**`slug`** est `not null unique`, mais la ligne est créée au **dépôt du fichier**, avant
+extraction, donc sans titre. Stratégie en trois temps :
+
+1. **À la création** (statut `brouillon`) : slug technique `'brouillon-' + 8 caractères
+   aléatoires`, posé par un `default` de colonne côté base (l'insertion ne peut donc
+   jamais échouer sur un slug manquant).
+2. **Au passage à `validee`** : régénération **côté app** depuis `contenus.fr.titre` —
+   translittéré, minuscules, tirets, suffixe numérique en cas de collision.
+3. **Au passage à `publiee`** : le slug est **gelé définitivement**. Une colonne
+   `slug_gele` passe à `true` à la première publication, et un trigger `gel_slug`
+   **rejette toute modification ultérieure** du slug (même après archivage). Une landing
+   page dont l'URL change est une landing page perdue.
+
+Le gel est **garanti par la base** (trigger), la régénération est faite par l'app.
 
 ### Table `photos`
 

@@ -1,36 +1,122 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Machine Marketing — Aéroport Voyage
 
-## Getting Started
+Outil interne de génération de matériel marketing (post social, bloc courriel, landing
+pages) à partir d'offres fournisseurs. **La spec fait autorité : voir [`CLAUDE.md`](./CLAUDE.md).**
 
-First, run the development server:
+Pile : Next.js 16 (App Router, TS strict) · Tailwind v4 · shadcn/ui · Supabase · Vercel.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+---
+
+## Branchement Supabase (Windows) — à faire avant la phase 1
+
+Tant que ces étapes ne sont pas faites, l'app ne charge pas (aucune base). Commandes
+exactes, dans l'ordre.
+
+### 1. Installer le CLI Supabase
+
+Le CLI est déjà en `devDependency` du projet : utilise `npx supabase`. (Alternative
+sans Node : `scoop install supabase`.)
+
+```powershell
+npx supabase --version
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Créer le projet hébergé
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Sur https://supabase.com → **New project**. Note le mot de passe de la base et la
+**Project Ref** (Project Settings → General → « Reference ID », format `abcdefgh…`).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 3. Désactiver l'inscription publique ⚠️
 
-## Learn More
+Notre clé `anon` part dans le bundle navigateur des landing pages : elle est **publique**.
+Avec l'inscription ouverte, n'importe qui pourrait se créer un compte et hériter de
+l'accès `authenticated` (accès complet). À couper immédiatement :
 
-To learn more about Next.js, take a look at the following resources:
+**Dashboard → Authentication → Sign In / Providers → Email →** décocher
+**« Allow new users to sign up »**, puis **Save**.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+> Les comptes se créent **uniquement par invitation** depuis le tableau de bord
+> (étape 7). Pas d'auto-inscription.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 4. Récupérer les clés → `.env.local`
 
-## Deploy on Vercel
+**Dashboard → Project Settings → API.** Copie l'URL et la clé `anon` (`publishable`)
+dans un fichier `.env.local` à la racine (modèle : `.env.example`) :
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+NEXT_PUBLIC_SUPABASE_URL=https://<ref>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<clé anon>
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 5. Lier le projet et pousser les migrations
+
+```powershell
+npx supabase login
+npx supabase link --project-ref <ref>
+npx supabase db push
+```
+
+`db push` applique `0001_init.sql` puis `0002_rls_storage_slug.sql` : tables, RLS,
+**les deux buckets Storage** (`documents` privé, `photos` public), triggers, index,
+stratégie de slug.
+
+### 6. Vérifier les buckets
+
+**Dashboard → Storage.** Confirme la présence de `documents` (privé) et `photos`
+(public). Ils sont créés par la migration 0002 — rien à créer à la main.
+
+### 7. Créer ton compte
+
+**Dashboard → Authentication → Users → Add user** (ou *Invite*). Courriel + mot de
+passe. C'est le seul moyen de créer un compte (inscription publique coupée à l'étape 3).
+
+### 8. Tester le RLS public ⚠️ (obligatoire)
+
+**Dashboard → SQL Editor.** Colle et exécute ce test : une offre `brouillon` ne doit
+**jamais** être visible via la vue publique pour le rôle `anon`.
+
+```sql
+begin;
+insert into offres (statut, destination_pays) values ('brouillon', 'ZZBROUILLON');
+insert into offres (statut, destination_pays) values ('publiee',   'ZZPUBLIEE');
+
+set local role anon;
+
+-- ATTENDU : une seule ligne, « ZZPUBLIEE ». « ZZBROUILLON » ne doit PAS apparaître.
+select destination_pays
+from offres_publiques
+where destination_pays in ('ZZBROUILLON', 'ZZPUBLIEE');
+
+reset role;
+rollback;
+```
+
+Vérification bonus (protection colonne) — doit renvoyer **permission denied** :
+
+```sql
+set local role anon;
+select extraction_brute from offres limit 1;  -- doit échouer
+reset role;
+```
+
+### 9. Lancer l'app
+
+```powershell
+npm run dev
+```
+
+Ouvre http://localhost:3000 → redirection vers `/connexion` → connexion avec le compte
+de l'étape 7 → `/offres` (liste vide).
+
+---
+
+## Développement
+
+```powershell
+npm run dev     # serveur de dev (Turbopack)
+npm run build   # build de production
+npm run lint    # ESLint
+```
+
+Nouvelle migration : `npx supabase migration new <nom>` (crée un fichier horodaté dans
+`supabase/migrations/`), puis `npx supabase db push`.
