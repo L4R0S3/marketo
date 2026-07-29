@@ -39,8 +39,9 @@ aucune infrastructure asynchrone sans me demander d'abord.
 
 | Rôle | Choix |
 |---|---|
-| Framework | Next.js 15, App Router, TypeScript strict |
-| Styles | Tailwind CSS |
+| Framework | Next.js 16, App Router, TypeScript strict |
+| Styles | Tailwind CSS v4 (configuration CSS via `@theme`, pas de `tailwind.config.ts`) |
+| Optimisation | React Compiler **désactivé** (admin laid, perf non critique) |
 | Composants admin | shadcn/ui, thème par défaut |
 | Base de données | Supabase Postgres |
 | Fichiers | Supabase Storage |
@@ -48,7 +49,7 @@ aucune infrastructure asynchrone sans me demander d'abord.
 | Validation | Zod |
 | Formulaires | react-hook-form + `@hookform/resolvers/zod` |
 | Extraction | `@anthropic-ai/sdk`, modèle `claude-sonnet-5` |
-| Rendu image | `@vercel/og` (Satori) |
+| Rendu image | `ImageResponse` de `next/og` (Satori, inclus avec l'App Router — rien à installer) |
 | Gabarit courriel | MJML compilé côté serveur |
 | Hébergement | Vercel |
 
@@ -352,6 +353,19 @@ de choisir** — c'est une décision de marque, pas technique.
 Les fichiers `.ttf` ou `.woff` vont dans `/public/fonts/` et sont chargés avec
 `fs.readFileSync` au moment du rendu.
 
+### Limite de bundle
+
+Le bundle d'`ImageResponse` est plafonné à **500 Ko**, polices et images comprises. Le
+dépassement produit des erreurs de déploiement Vercel difficiles à diagnostiquer. Le
+gabarit a besoin de plusieurs styles de police (italique condensé gras, italique
+régulier, gras), ce qui dépasse la limite avec des fichiers complets.
+
+Conséquence : les polices **doivent** être sous-ensemblées avant d'entrer dans
+`/public/fonts/`. Jeu de caractères minimal : latin de base, accents français
+(`àâäçéèêëîïôöùûüÿ` et leurs majuscules), chiffres, et `$ & → ! ? ' ( ) , . : ; / +`.
+Utilise `glyphhanger` ou `subset-font`. Objectif : **moins de 30 Ko par fichier**.
+Documente la commande de sous-ensemblage dans le dépôt pour qu'elle soit reproductible.
+
 ### Le bloc signature
 
 Ne le reconstruis pas en CSS. Le `.COM` pivoté à 90 degrés, la découpe arrondie
@@ -372,49 +386,63 @@ absolues accessibles publiquement, ou des data URI.
 
 ## 8. Extraction
 
-### Principe
+### Principe : deux appels séparés
 
-L'IA ne produit pas du texte marketing libre qu'on tronquerait ensuite. Elle produit
-**directement** du texte conforme aux limites de longueur du gabarit : un titre de
-34 caractères maximum, des lignes de 62.
+L'extraction se fait en **deux appels distincts**, jamais fusionnés. La raison est un
+risque métier : les contraintes de longueur ne portent pas sur les mêmes données que
+les faits. Un prix ou une date n'a pas de limite de caractères ; seuls les textes
+composés (titre, bandeau, lignes de blocs) sont contraints. Les mélanger dans un seul
+appel signifie qu'une relance causée par un titre trop long fait **rejouer l'extraction
+du prix**. Inacceptable sur une tâche où l'erreur de prix est le risque principal.
 
-Ces limites vivent à deux endroits : dans le prompt système et dans le schéma Zod.
-Si la sortie ne valide pas, relance une fois avec le message d'erreur Zod en
-retour, puis échoue proprement en affichant l'erreur à l'opérateur.
+Les deux appels utilisent les structured outputs (`output_config.format` avec un
+`json_schema` ; l'ancien `output_format` est déprécié). Rappel de la limite du JSON
+Schema : il **ne supporte pas** `minLength`/`maxLength` ni `minimum`/`maximum` — les SDK
+les retirent du schéma et les revalident côté client. Les structured outputs garantissent
+donc la **forme** (champs, types, enums, `required`), et Zod garantit le reste.
 
-### Structured outputs — à décider avant la phase 2
+### Appel 1 — Extraction (les faits)
 
-Les « structured outputs » sont disponibles sur `claude-sonnet-5`
-(`output_config.format` avec un `json_schema`, l'ancien `output_format` est déprécié ;
-`messages.parse()` valide automatiquement en TS). **Limite décisive pour ce projet :**
-le JSON Schema des structured outputs **ne supporte pas** les contraintes de longueur
-(`minLength`/`maxLength`) ni numériques (`minimum`/`maximum`) — les SDK les retirent
-du schéma envoyé et les revalident côté client.
+- **Entrée** : le document (image, PDF, ou texte extrait d'une URL).
+- **Sortie** : les faits seulement — ce qui alimente les colonnes de la table `offres`
+  (`type_produit`, dates, prix, `occupation`, navire, aéroports, compagnie, liens…)
+  plus les listes factuelles (`inclusions`, `exclusions`, `itineraire`).
+- Structured outputs, `output_config` avec `json_schema`. **Aucune contrainte de
+  longueur** dans ce schéma.
+- Validation Zod côté client **limitée à la cohérence métier** : `date_retour` >
+  `date_depart`, `prix_par_personne` > 0, `occupation` dans l'enum, etc.
+- **Aucune relance automatique.** Si ça échoue, on affiche l'erreur à l'opérateur — on
+  ne rejoue jamais une extraction de faits à l'aveugle.
 
-Or tout le gabarit repose sur des limites de caractères (`titre` ≤ 34, `lignes` ≤ 62,
-`mentions` ≤ 22…). Donc les structured outputs garantissent la **forme** (champs,
-types, enums, `required`) mais **pas les longueurs**. Deux options à trancher :
+### Appel 2 — Composition (le texte marketing)
 
-1. **Hybride** : `output_config.format` pour garantir la structure (supprime la logique
-   « JSON strict par prompt ») + Zod conservé uniquement pour valider les `.max()` avec
-   relance unique. Plus fiable sur la structure.
-2. **Statu quo** : JSON strict par prompt + validation Zod complète + relance sur échec.
-
-Incompatible avec les citations (400) et le prefill. Compatible streaming, batches,
-token counting, thinking. 1ʳᵉ requête = coût de compilation du schéma (cache 24 h).
-**Ne pas trancher seul — demander avant de coder la route d'extraction.**
+- **Entrée** : les faits validés de l'appel 1, en JSON.
+- **Sortie** : l'objet `PostVisuel` de la section 6 (titre, bandeau, colonnes, blocs)
+  plus l'accroche et la FAQ.
+- Structured outputs pour la forme ; Zod côté client pour les `.max()` de longueur.
+- **UNE relance** en cas de dépassement, avec le message d'erreur Zod en retour et
+  l'instruction de **raccourcir sans changer les faits**, puis échec propre.
+- Ce prompt ne doit **jamais** inventer ni modifier un chiffre. Les prix et dates lui
+  arrivent déjà validés ; il les recopie tels quels.
 
 ### Implémentation
 
-- Route `POST /api/extraction`, corps : `{ offreId }`
-- Récupère le document depuis Storage, l'encode en base64
+- Route(s) : une route par étape, ou une route unique `POST /api/extraction` avec un
+  paramètre d'étape (`{ offreId, etape: "extraction" | "composition" }`), au choix.
+- Récupère le document depuis Storage, l'encode en base64.
 - Les PDF passent nativement à l'API avec `type: "document"`, les images avec
-  `type: "image"` et le bon `media_type`
-- Pour une URL, récupère le HTML et extrais le texte avant d'envoyer
-- Réponse attendue : JSON strict, aucun préambule, aucun bloc de code
-- Stocke la réponse brute dans `extraction_brute`, la version validée dans `contenus`
+  `type: "image"` et le bon `media_type`. Pour une URL, récupère le HTML et extrais le
+  texte avant d'envoyer.
+- **`extraction_brute` devient un objet à deux clés : `{ extraction, composition }`**,
+  chacune conservant la sortie brute de l'appel correspondant. Jamais écrasé.
+- La version validée finale va dans `contenus`.
+- **Deux fichiers de prompt** : `lib/extraction/prompt.ts` et `lib/composition/prompt.ts`.
+- **Régénération** : l'écran de validation (phase 3) aura un bouton « régénérer le
+  texte » qui relance **l'appel 2 seul**, sur les faits déjà validés, sans retoucher aux
+  faits. Prévoir cette séparation dans l'architecture dès maintenant, même si le bouton
+  n'est codé qu'en phase 3.
 
-### Règles pour le prompt système
+### Règles pour le prompt système — Appel 1 (extraction)
 
 - Les prix ne sont **jamais** inventés ni arrondis. Champ nul si illisible.
 - Les dates au format ISO. Année explicite obligatoire.
@@ -422,6 +450,11 @@ token counting, thinking. 1ʳᵉ requête = coût de compilation du schéma (cac
   l'erreur la plus coûteuse — une cabine solo et une cabine double n'ont pas le
   même prix par personne.
 - Distinguer prix affiché et prix taxes incluses.
+
+### Règles pour le prompt système — Appel 2 (composition)
+
+- Recopier les chiffres et dates fournis ; ne jamais les inventer ni les modifier.
+- Respecter les limites de longueur du gabarit (le schéma Zod les revalide).
 - Interdits stylistiques : tirets cadratins, triples adjectifs, formules d'ouverture
   toutes faites du genre « Découvrez » ou « Laissez-vous transporter ».
 - Ton : direct, factuel, concret. Une information par bloc.
@@ -443,14 +476,16 @@ token counting, thinking. 1ʳᵉ requête = coût de compilation du schéma (cac
   /(public)
     /voyage/[slug]/page.tsx     landing page
   /api
-    /extraction/route.ts
+    /extraction/route.ts        deux étapes : extraction (faits) puis composition (texte)
     /og/[id]/route.tsx          rendu PNG
     /email/[campagneId]/route.ts
 
 /lib
-  /schema/offre.ts              Zod — source de vérité unique
-  /extraction/prompt.ts
-  /extraction/client.ts
+  /schema/offre.ts              Zod — faits (cohérence métier, pas de longueur)
+  /extraction/prompt.ts         Appel 1 — prompt système extraction des faits
+  /extraction/client.ts         appel API + structured outputs (faits)
+  /composition/prompt.ts        Appel 2 — prompt système composition du texte
+  /composition/client.ts        appel API + structured outputs + relance longueur
   /templates/social/
     schema.ts
     Gabarit.tsx                 JSX pour Satori
@@ -503,7 +538,10 @@ Compare avec l'original avant de coder la variante double.
 de marque — demande. Les données de voyage ont des contraintes légales; une
 supposition raisonnable peut être fausse d'une manière coûteuse.
 
-**Pas de dépendance nouvelle sans me demander.** La pile de la section 2 est arrêtée.
+**Pas de dépendance nouvelle sans me demander.** La pile de la section 2 est arrêtée
+quant aux **choix** de technologies. Les numéros de version peuvent évoluer : si une
+version installée diffère de la spec, **signale-le et demande, ne downgrade pas
+d'office.**
 
 **Le français est la langue du domaine.** Les noms de tables, de colonnes et de
 champs de schéma restent en français, comme documenté ici. L'interface est en
