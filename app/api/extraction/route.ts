@@ -18,6 +18,7 @@ const COLONNES_FAITS =
 
 // Faits qui n'ont pas de colonne dédiée : ils vivent dans extraction_brute.extraction.
 const FAITS_SANS_COLONNE = [
+  "theme_voyage",
   "formule_secondaire",
   "inclusions",
   "exclusions",

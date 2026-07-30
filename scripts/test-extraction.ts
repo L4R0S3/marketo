@@ -28,6 +28,7 @@ const fichiers = readdirSync(DOSSIER)
 
 // Champs texte scrutés : une valeur inventée y est plus coûteuse qu'ailleurs.
 const TEXTES_SURVEILLES = [
+  "theme_voyage",
   "fournisseur",
   "destination_pays",
   "devise",

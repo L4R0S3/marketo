@@ -43,6 +43,13 @@ DATES
 OCCUPATION
 - simple, double, triple ou quadruple. C'est l'erreur la plus coûteuse (solo ≠ double). Non précisé → occupation = "" ; ne suppose pas « double » par défaut.
 
+THÈME DU VOYAGE
+- theme_voyage : le sujet central, l'identité ou l'angle de vente tel que présenté par le document source. C'est ce qu'un humain répondrait à « c'est un voyage sur quoi ? ». Exemples tirés des documents réels :
+  - Canal de Panama (pas « Seattle à Miami »)
+  - Cabine solo (pas « MSC World Europa »)
+  - Grand tour du Maroc (pas « Casablanca, Rabat, Fès… »)
+  Recopie le thème tel que la source le présente. Ce n'est pas une destination, pas un itinéraire, pas un nom de navire — c'est l'angle d'accroche. Si le document ne met rien de particulier en avant, chaîne vide.
+
 TYPE DE PRODUIT (déduit du CONTENU, jamais d'un mot-clé)
 - forfait  : vol + séjour fixe (hôtel/resort), une seule destination.
 - croisiere : navire avec escales. Un « forfait vols + croisière » est une CROISIÈRE.

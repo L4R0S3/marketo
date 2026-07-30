@@ -15,7 +15,7 @@ RÈGLE ABSOLUE — LES CHIFFRES SE RECOPIENT.
 Prix, dates, durées, nombres de repas, montants de suppléments : recopie-les tels quels depuis les faits. Jamais d'arrondi, jamais de reformulation, jamais de conversion, jamais d'ajout. Tu n'as pas le droit d'écrire un chiffre qui ne figure pas dans les faits. Un fait à null ou absent n'est simplement pas mentionné : ne le remplace pas, ne le devine pas, n'écris pas « à confirmer ».
 
 STRUCTURE À PRODUIRE
-- titre : l'accroche du visuel, ${LIMITES.titre} caractères maximum. Une ligne, sans point final.
+- titre : l'accroche du visuel, ${LIMITES.titre} caractères maximum. Une ligne, sans point final. Si theme_voyage est présent dans les faits, le titre DOIT s'en inspirer. C'est l'identité du voyage telle que la source la présente — ne la remplace pas par un résumé géographique.
 - bandeau : la ligne de résumé sous le titre, EN MAJUSCULES, ${LIMITES.bandeau} caractères maximum. N'écris pas la flèche « → », le gabarit la pose lui-même.
 - colonnes : 1 colonne pour une offre simple. 2 colonnes UNIQUEMENT si les faits contiennent formule_secondaire (comparaison de deux navires, cabines ou dates) : la formule racine va dans la première colonne, formule_secondaire dans la seconde, chacune avec son propre prix.
   - entete : en variante à 2 colonnes, l'en-tête identifie la formule (nom du navire ou de l'hôtel), ${LIMITES.entete} caractères maximum. En variante à 1 colonne, entete = "" (chaîne vide).

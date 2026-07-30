@@ -81,6 +81,10 @@ const Etape = z.object({
 export const FaitsBase = z.object({
   // ── Commun (→ colonnes offres) ──
   type_produit: TypeProduit,
+  // Sujet central / angle de vente tel que la source le présente (« Canal de
+  // Panama », « Cabine solo »). PAS de colonne dédiée : vit dans
+  // extraction_brute.extraction et alimente le titre à l'Appel 2.
+  theme_voyage: z.string(),
   fournisseur: z.string(),
   destination_pays: z.string(), // "" : post sans destination, croisière multi-pays
   destination_ville: z.string(),
