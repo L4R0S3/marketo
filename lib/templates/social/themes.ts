@@ -1,30 +1,56 @@
-import type { ThemeT } from "./schema";
-
-// Les six thèmes de couleur, relevés à la pipette sur les posts Canva existants
-// (bordures des quatre captures de fixtures/posts/, points contaminés par la photo
-// écartés). Olive et prune n'apparaissaient dans aucune capture : leurs valeurs
-// sont dérivées sur la même recette — teinte claire et saturée à gauche, la même
-// assombrie à droite.
+// Les thèmes du post social. Chacun est un FRAME PNG de public/frames/ : il
+// contient déjà le cadre, le dégradé, le voile et le bloc signature. Le gabarit
+// ne dessine plus aucun de ces éléments — il ne place que du texte.
 //
-// Le dégradé du cadre est HORIZONTAL (gauche → droite), pas diagonal : c'est ce
-// que font les originaux.
+// AJOUTER UN THÈME = deux gestes, rien d'autre :
+//   1. déposer le PNG (1080 × 1350, RGBA, même géométrie) dans public/frames/
+//   2. ajouter son identifiant à THEME_IDS et son entrée à THEMES
+// Le schéma Zod, le formulaire de validation et les pastilles de l'interface
+// se mettent à jour tout seuls : ils dérivent tous de THEME_IDS.
+//
+// Ce module ne dépend de rien : c'est la source, pas un consommateur.
+
+export const THEME_IDS = [
+  "azur",
+  "sarcelle",
+  "lagon",
+  "menthe",
+  "olive",
+  "prune",
+  "framboise",
+] as const;
+
+export type ThemeT = (typeof THEME_IDS)[number];
 
 export type Theme = {
   nom: string;
-  gauche: string; // départ du dégradé de bordure
-  droite: string; // arrivée — sert aussi d'accent (flèche du bandeau, icône du badge)
+  fichier: string;
+  /** Couleur moyenne de la bordure, mesurée sur le PNG. Sert aux pastilles. */
+  dominante: string;
 };
 
 export const THEMES: Record<ThemeT, Theme> = {
-  framboise: { nom: "Framboise", gauche: "#ED3A53", droite: "#852352" },
-  sarcelle: { nom: "Sarcelle", gauche: "#89C4BE", droite: "#3A575A" },
-  azur: { nom: "Azur", gauche: "#4EC167", droite: "#1A61A8" },
-  ambre: { nom: "Ambre", gauche: "#F7953F", droite: "#A4400F" },
-  olive: { nom: "Olive", gauche: "#8BC34A", droite: "#33691E" },
-  prune: { nom: "Prune", gauche: "#CE93D8", droite: "#6A1B9A" },
+  azur: { nom: "Azur", fichier: "azur.png", dominante: "#29B9BC" },
+  sarcelle: { nom: "Sarcelle", fichier: "sarcelle.png", dominante: "#72C6E5" },
+  lagon: { nom: "Lagon", fichier: "lagon.png", dominante: "#40A2CE" },
+  menthe: { nom: "Menthe", fichier: "menthe.png", dominante: "#53A981" },
+  olive: { nom: "Olive", fichier: "olive.png", dominante: "#89CDA1" },
+  prune: { nom: "Prune", fichier: "prune.png", dominante: "#79BACF" },
+  framboise: { nom: "Framboise", fichier: "framboise.png", dominante: "#835661" },
 };
 
-export const NOMS_THEMES = Object.entries(THEMES).map(([cle, t]) => ({
-  valeur: cle as ThemeT,
-  nom: t.nom,
-}));
+export const NOMS_THEMES = THEME_IDS.map((valeur) => ({ valeur, nom: THEMES[valeur].nom }));
+
+// Géométrie commune aux sept frames, mesurée sur les fichiers (canal alpha) :
+// le contenu doit rester dans ces limites sous peine de passer sous le cadre ou
+// sous la signature.
+export const GEOMETRIE = {
+  largeur: 1080,
+  hauteur: 1350,
+  /** Bandeau opaque en haut du frame : c'est là que se pose le titre. */
+  bandeauHaut: 211,
+  /** Épaisseur du cadre sur les côtés et en bas. */
+  bordure: 22,
+  /** Le bloc signature occupe le bas à partir de cette abscisse. */
+  signatureX: 560,
+} as const;

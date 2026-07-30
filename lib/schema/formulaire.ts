@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { LIMITES, type PostVisuelT, type ThemeT } from "@/lib/templates/social/schema";
+import { LIMITES, type PostVisuelT } from "@/lib/templates/social/schema";
+import { THEME_IDS, type ThemeT } from "@/lib/templates/social/themes";
 import { LIMITES_TEXTE, type CompositionT } from "@/lib/composition/schema";
 
 // Schémas des FORMULAIRES du flux de validation, en deux étapes indépendantes :
@@ -103,7 +104,8 @@ export const VisuelForm = z
         r: z.string().min(1, "réponse obligatoire").max(LIMITES_TEXTE.reponse),
       }),
     ),
-    theme: z.enum(["framboise", "sarcelle", "azur", "ambre", "olive", "prune"]),
+    // Dérivé de themes.ts : ajouter un frame suffit à l'accepter au formulaire.
+    theme: z.enum(THEME_IDS),
     focale: z.enum(["haut", "centre", "bas"]),
   })
   .superRefine((v, ctx) => {

@@ -1,37 +1,44 @@
 import { parseGras } from "./parseGras";
-import { THEMES } from "./themes";
+import { GEOMETRIE } from "./themes";
 import type { PostVisuelT } from "./schema";
 
 // Gabarit du post social 1080 × 1350, rendu par Satori (next/og).
 //
-// Contraintes Satori (CLAUDE.md §7) : flexbox UNIQUEMENT, `display: flex` explicite
-// sur chaque conteneur, pas de grid, pas de float, pas de box-decoration-break.
-// Les dégradés linéaires passent. Les images doivent être des URL absolues.
+// TROIS COUCHES, dans cet ordre :
+//   1. la photo hero, en absolu, object-fit cover sur tout le format
+//   2. le FRAME PNG du thème, en absolu, par-dessus la photo
+//   3. le texte
 //
-// Deux familles : Anton (titre, montants) et Raleway 400/700 (tout le reste, la
-// graisse 700 portant le gras partiel **segment**).
+// Le frame porte déjà le cadre, le dégradé, le voile et le bloc signature : rien
+// de tout cela n'est reconstruit ici. Ce composant ne fait plus que placer du
+// texte dans les zones libres, dont les limites viennent de GEOMETRIE (mesurées
+// sur le canal alpha des PNG) :
+//   • le titre se pose sur le bandeau opaque du haut (0 → 211) ;
+//   • le reste vit dans la fenêtre transparente, donc sur la photo ;
+//   • en bas, le prix reste à gauche de la signature (x < 560).
 //
-// Chaque LIGNE d'un bloc est sa propre pastille blanche : c'est ce qui reproduit
-// le box-decoration-break: clone de l'original, que Satori ne supporte pas.
+// Contraintes Satori (CLAUDE.md §7) : flexbox uniquement, `display: flex`
+// explicite sur chaque conteneur, pas de grid, pas de float.
 
-export const LARGEUR = 1080;
-export const HAUTEUR = 1350;
+export const LARGEUR = GEOMETRIE.largeur;
+export const HAUTEUR = GEOMETRIE.hauteur;
 
 const BLANC = "#ffffff";
 const ENCRE = "#141414";
+const MARGE = 56; // marge du texte, à l'intérieur du cadre du frame
 
-// Satori ne mesure pas le texte avant le rendu : une chaîne trop longue passe à la
-// ligne alors que le gabarit exige UNE ligne (titre, bandeau). On dimensionne donc
-// la police d'après la longueur, avec la largeur d'avance moyenne mesurée sur les
-// rendus réels — 0,44 em pour Anton, 0,56 em pour Raleway 700 en majuscules.
+// Satori ne mesure pas le texte avant le rendu : une chaîne trop longue passerait
+// à la ligne alors que le gabarit exige UNE ligne (titre, bandeau). On dimensionne
+// donc d'après la longueur, avec l'avance moyenne mesurée sur les rendus réels —
+// 0,44 em pour Anton, 0,56 em pour Raleway 700 en majuscules.
 function tailleQuiTient(texte: string, largeur: number, avance: number, max: number) {
   const n = Math.max(texte.length, 1);
   return Math.max(18, Math.min(max, Math.floor(largeur / (avance * n))));
 }
 
 // Une ligne de bloc : pastille blanche épousant la largeur du texte. Les segments
-// en gras sont posés côte à côte en flex-row — chaque ligne est écrite pour tenir
-// sur une ligne, il n'y a donc jamais de retour automatique à gérer.
+// en gras sont posés côte à côte — chaque ligne est écrite pour tenir sur une
+// ligne, il n'y a donc jamais de retour automatique à gérer.
 function LignePastille({ texte, taille }: { texte: string; taille: number }) {
   return (
     <div
@@ -90,10 +97,11 @@ function BlocPrix({
       <span
         style={{
           fontFamily: "Anton",
-          fontSize: compact ? 86 : 158,
+          fontSize: compact ? 82 : 140,
           lineHeight: 1,
           color: BLANC,
           textShadow: "0 6px 18px rgba(0,0,0,.6)",
+          transform: "skewX(-12deg)",
         }}
       >
         {supplement ? "+" : ""}${prix.montant}
@@ -119,16 +127,15 @@ function BlocPrix({
   );
 }
 
-function Colonne({ colonne, double }: { colonne: PostVisuelT["colonnes"][number]; double: boolean }) {
+function Colonne({
+  colonne,
+  double,
+}: {
+  colonne: PostVisuelT["colonnes"][number];
+  double: boolean;
+}) {
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        flex: 1,
-        alignItems: double ? "flex-start" : "flex-start",
-      }}
-    >
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, alignItems: "flex-start" }}>
       {colonne.entete && <LignePastille texte={`**${colonne.entete}**`} taille={double ? 28 : 30} />}
       {colonne.blocs.map((b, i) => (
         <div key={i} style={{ display: "flex", flexDirection: "column", marginBottom: 10 }}>
@@ -141,32 +148,7 @@ function Colonne({ colonne, double }: { colonne: PostVisuelT["colonnes"][number]
   );
 }
 
-// Signature : ne pas la reconstruire finement en CSS (CLAUDE.md §7 recommande un
-// SVG exporté par thème). En attendant ces fichiers, un bloc typographique sobre.
-function Signature() {
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "flex-end",
-        background: "rgba(20,20,20,.82)",
-        borderRadius: 18,
-        padding: "16px 26px",
-      }}
-    >
-      <span style={{ fontFamily: "Anton", fontSize: 38, color: BLANC, letterSpacing: 1 }}>
-        AEROPORTVOYAGE.COM
-      </span>
-      <span style={{ fontFamily: "Raleway", fontSize: 21, color: "#e8e8e8" }}>
-        info@aeroportvoyage.com | 514-289-8686
-      </span>
-    </div>
-  );
-}
-
-export function Gabarit({ visuel }: { visuel: PostVisuelT }) {
-  const theme = THEMES[visuel.theme];
+export function Gabarit({ visuel, frame }: { visuel: PostVisuelT; frame: string }) {
   const double = visuel.colonnes.length === 2;
   const position =
     visuel.photo.focale === "haut" ? "top" : visuel.photo.focale === "bas" ? "bottom" : "center";
@@ -174,64 +156,88 @@ export function Gabarit({ visuel }: { visuel: PostVisuelT }) {
   return (
     <div
       style={{
+        position: "relative",
+        display: "flex",
         width: LARGEUR,
         height: HAUTEUR,
-        display: "flex",
-        padding: 14,
-        background: `linear-gradient(90deg, ${theme.gauche}, ${theme.droite})`,
+        backgroundColor: "#2b3440",
       }}
     >
-      <div
-        style={{
-          position: "relative",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "space-between",
-          flex: 1,
-          padding: 36,
-          backgroundColor: "#2b3440",
-          ...(visuel.photo.url
-            ? {
-                backgroundImage: `url(${visuel.photo.url})`,
-                backgroundSize: "cover",
-                backgroundPosition: position,
-              }
-            : {}),
-        }}
-      >
-        {/* Voile : sans lui, un titre blanc sur photo claire devient illisible.
-            Opaque à 60 % en haut, transparent au tiers de la hauteur. Posé avant
-            le contenu, donc dessous — Satori empile dans l'ordre du DOM. */}
-        <div
+      {/* Couche 1 — la photo. Ces <img> ne sont pas du DOM : Satori les lit pour
+          composer une image, next/image n'a rien à y faire. */}
+      {visuel.photo.url && (
+        // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
+        <img
+          src={visuel.photo.url}
+          width={LARGEUR}
+          height={HAUTEUR}
           style={{
             position: "absolute",
             top: 0,
             left: 0,
-            right: 0,
-            height: 620,
-            display: "flex",
-            background: "linear-gradient(180deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0) 100%)",
+            width: LARGEUR,
+            height: HAUTEUR,
+            objectFit: "cover",
+            objectPosition: position,
           }}
         />
+      )}
 
-        {/* Haut : titre, bandeau, blocs */}
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          {/* Anton n'a pas d'italique et Satori n'en synthétise pas : l'inclinaison
-              du gabarit d'origine est obtenue par une déformation. */}
+      {/* Couche 2 — le frame : cadre, dégradé, voile et signature */}
+      {/* eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text */}
+      <img
+        src={frame}
+        width={LARGEUR}
+        height={HAUTEUR}
+        style={{ position: "absolute", top: 0, left: 0, width: LARGEUR, height: HAUTEUR }}
+      />
+
+      {/* Couche 3 — le texte */}
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          display: "flex",
+          flexDirection: "column",
+          width: LARGEUR,
+          height: HAUTEUR,
+        }}
+      >
+        {/* Titre, sur le bandeau opaque du frame */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            height: GEOMETRIE.bandeauHaut,
+            paddingLeft: MARGE,
+            paddingRight: MARGE,
+          }}
+        >
           <span
             style={{
               fontFamily: "Anton",
-              fontSize: tailleQuiTient(visuel.titre, 980, 0.44, 96),
+              fontSize: tailleQuiTient(visuel.titre, LARGEUR - 2 * MARGE - 20, 0.44, 92),
               lineHeight: 1.05,
               color: BLANC,
-              textShadow: "0 8px 22px rgba(0,0,0,.55)",
-              marginBottom: 16,
+              textShadow: "0 6px 18px rgba(0,0,0,.45)",
               transform: "skewX(-12deg)",
             }}
           >
             {visuel.titre}
           </span>
+        </div>
 
+        {/* Bandeau et blocs, dans la fenêtre transparente */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            paddingLeft: MARGE,
+            paddingRight: MARGE,
+            paddingTop: 18,
+          }}
+        >
           <div
             style={{
               display: "flex",
@@ -244,21 +250,14 @@ export function Gabarit({ visuel }: { visuel: PostVisuelT }) {
               marginBottom: 22,
             }}
           >
-            <span
-              style={{
-                fontFamily: "Anton",
-                fontSize: 38,
-                color: theme.droite,
-                marginRight: 14,
-              }}
-            >
+            <span style={{ fontFamily: "Anton", fontSize: 38, color: ENCRE, marginRight: 14 }}>
               →
             </span>
             <span
               style={{
                 fontFamily: "Raleway",
                 fontWeight: 700,
-                fontSize: tailleQuiTient(visuel.bandeau, 870, 0.56, 34),
+                fontSize: tailleQuiTient(visuel.bandeau, 830, 0.56, 34),
                 color: ENCRE,
               }}
             >
@@ -273,73 +272,55 @@ export function Gabarit({ visuel }: { visuel: PostVisuelT }) {
           </div>
         </div>
 
-        {/* Bas : prix, badge, signature */}
+        {/* Bas : prix à gauche de la signature, badge au-dessus d'elle */}
         <div
           style={{
+            position: "absolute",
+            left: MARGE,
+            bottom: 46,
             display: "flex",
-            flexDirection: "row",
-            alignItems: "flex-end",
-            justifyContent: "space-between",
+            flexDirection: "column",
+            width: GEOMETRIE.signatureX - MARGE - 20,
           }}
         >
-          {/* Prix en colonne : les prix de formules sur une rangée, le supplément
-              dessous. En rangée unique, la variante double débordait à droite. */}
-          <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-            {double ? (
-              <div style={{ display: "flex", flexDirection: "row", gap: 32 }}>
-                {visuel.colonnes.map((c, i) => (
-                  <BlocPrix key={i} prix={c.prix} compact />
-                ))}
-              </div>
-            ) : (
-              <BlocPrix prix={visuel.colonnes[0].prix} />
-            )}
-            {visuel.prix_secondaire && (
-              <div style={{ display: "flex", marginTop: 14 }}>
-                <BlocPrix prix={visuel.prix_secondaire} compact supplement />
-              </div>
-            )}
-          </div>
+          {double ? (
+            <div style={{ display: "flex", flexDirection: "row", gap: 28 }}>
+              {visuel.colonnes.map((c, i) => (
+                <BlocPrix key={i} prix={c.prix} compact />
+              ))}
+            </div>
+          ) : (
+            <BlocPrix prix={visuel.colonnes[0].prix} />
+          )}
+          {visuel.prix_secondaire && (
+            <div style={{ display: "flex", marginTop: 14 }}>
+              <BlocPrix prix={visuel.prix_secondaire} compact supplement />
+            </div>
+          )}
+        </div>
 
+        {visuel.badge && (
           <div
             style={{
+              position: "absolute",
+              right: MARGE,
+              bottom: 150,
               display: "flex",
-              flexDirection: "column",
-              alignItems: "flex-end",
-              flexShrink: 0,
-              marginLeft: 24,
+              flexDirection: "row",
+              alignItems: "center",
+              background: "#f3ecdd",
+              borderRadius: 20,
+              padding: "12px 22px",
             }}
           >
-            {visuel.badge && (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "row",
-                  alignItems: "center",
-                  background: "#f3ecdd",
-                  borderRadius: 20,
-                  padding: "12px 22px",
-                  marginBottom: 14,
-                }}
-              >
-                <span
-                  style={{
-                    fontFamily: "Anton",
-                    fontSize: 34,
-                    color: theme.droite,
-                    marginRight: 12,
-                  }}
-                >
-                  {visuel.badge.icone.toUpperCase()}
-                </span>
-                <span style={{ fontFamily: "Raleway", fontWeight: 700, fontSize: 24, color: ENCRE }}>
-                  {visuel.badge.texte}
-                </span>
-              </div>
-            )}
-            <Signature />
+            <span style={{ fontFamily: "Anton", fontSize: 34, color: ENCRE, marginRight: 12 }}>
+              {visuel.badge.icone.toUpperCase()}
+            </span>
+            <span style={{ fontFamily: "Raleway", fontWeight: 700, fontSize: 24, color: ENCRE }}>
+              {visuel.badge.texte}
+            </span>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

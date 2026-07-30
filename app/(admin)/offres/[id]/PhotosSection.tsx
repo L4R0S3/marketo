@@ -1,12 +1,13 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import {
   televerserPhotos,
   definirHero,
   supprimerPhoto,
 } from "@/app/(admin)/offres/actions";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 type Photo = { id: string; role: string; publicUrl: string };
 
@@ -27,10 +28,16 @@ export function PhotosSection({
     undefined,
   );
 
+  // Le bouton restait actif sans fichier choisi : le clic partait, l'action
+  // répondait « Aucune photo sélectionnée » en petit rouge, et l'impression
+  // donnée était que le bouton ne faisait rien. On désactive plutôt, et on
+  // annonce ce qui est sélectionné.
+  const [choisis, setChoisis] = useState<string[]>([]);
+
   return (
     // Pas de titre ici : la carte qui accueille cette section en porte un.
     <section className="flex flex-col gap-3">
-      <form action={action} className="flex flex-col gap-2">
+      <form action={action} className="flex flex-col gap-2" onSubmit={() => setChoisis([])}>
         <input type="hidden" name="offreId" value={offreId} />
         <input
           type="file"
@@ -38,13 +45,23 @@ export function PhotosSection({
           multiple
           accept="image/png,image/jpeg,image/webp"
           className="text-sm"
+          onChange={(e) => setChoisis(Array.from(e.target.files ?? []).map((f) => f.name))}
         />
-        <div>
-          <Button type="submit" size="sm" disabled={enCours}>
+        <div className="flex items-center gap-3">
+          <Button type="submit" size="sm" disabled={enCours || choisis.length === 0}>
             {enCours ? "Téléversement…" : "Ajouter les photos"}
           </Button>
+          <span className="text-xs text-muted-foreground">
+            {choisis.length === 0
+              ? "Choisis un fichier pour activer le bouton."
+              : choisis.join(", ")}
+          </span>
         </div>
-        {etat?.error && <p className="text-sm text-red-600">{etat.error}</p>}
+        {etat?.error && (
+          <Alert variant="destructive">
+            <AlertDescription>{etat.error}</AlertDescription>
+          </Alert>
+        )}
       </form>
 
       {photos.length === 0 ? (

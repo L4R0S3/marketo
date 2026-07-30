@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { THEME_IDS } from "./themes";
 
 // Gabarit du post social 1080×1350 (spec CLAUDE.md §6). Ce schéma est le type
 // de RENDU, côté app : il n'est jamais envoyé à l'API. Il est assemblé à partir
@@ -44,7 +45,8 @@ export const Colonne = z.object({
 
 export const PostVisuel = z.object({
   variante: z.enum(["simple", "double"]),
-  theme: z.enum(["framboise", "sarcelle", "azur", "ambre", "olive", "prune"]),
+  // Les thèmes viennent de themes.ts : ajouter un frame suffit à l'accepter ici.
+  theme: z.enum(THEME_IDS),
   photo: z.object({
     url: z.string().url(),
     focale: z.enum(["haut", "centre", "bas"]).default("centre"),
@@ -57,5 +59,5 @@ export const PostVisuel = z.object({
 });
 
 export type PostVisuelT = z.infer<typeof PostVisuel>;
-export type ThemeT = PostVisuelT["theme"];
 export type FocaleT = PostVisuelT["photo"]["focale"];
+export type { ThemeT } from "./themes";

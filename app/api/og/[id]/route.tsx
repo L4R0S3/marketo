@@ -2,6 +2,7 @@ import { ImageResponse } from "next/og";
 import { createClient } from "@/lib/supabase/server";
 import { Gabarit, LARGEUR, HAUTEUR } from "@/lib/templates/social/Gabarit";
 import { chargerPolices } from "@/lib/templates/social/polices";
+import { frameEnDataUri } from "@/lib/templates/social/frames";
 import { PostVisuel } from "@/lib/templates/social/schema";
 
 export const runtime = "nodejs"; // lecture des polices sur le disque
@@ -40,7 +41,7 @@ export async function GET(
   if (!lu.success)
     return new Response("Aucun visuel validé pour cette offre.", { status: 409 });
 
-  return new ImageResponse(<Gabarit visuel={lu.data} />, {
+  return new ImageResponse(<Gabarit visuel={lu.data} frame={frameEnDataUri(lu.data.theme)} />, {
     width: LARGEUR,
     height: HAUTEUR,
     fonts: chargerPolices(),

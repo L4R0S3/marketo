@@ -10,6 +10,7 @@ import path from "node:path";
 import { ImageResponse } from "next/og";
 import { Gabarit, LARGEUR, HAUTEUR } from "../lib/templates/social/Gabarit";
 import { chargerPolices } from "../lib/templates/social/polices";
+import { frameEnDataUri } from "../lib/templates/social/frames";
 import type { PostVisuelT } from "../lib/templates/social/schema";
 
 const DOSSIER = "rendus";
@@ -127,7 +128,7 @@ const sirev: PostVisuelT = {
 };
 
 async function rendre(nom: string, visuel: PostVisuelT) {
-  const reponse = new ImageResponse(<Gabarit visuel={visuel} />, {
+  const reponse = new ImageResponse(<Gabarit visuel={visuel} frame={frameEnDataUri(visuel.theme)} />, {
     width: LARGEUR,
     height: HAUTEUR,
     fonts: chargerPolices(),

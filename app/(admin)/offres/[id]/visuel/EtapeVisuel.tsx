@@ -252,9 +252,7 @@ export function EtapeVisuel({
                             ? "ring-2 ring-foreground ring-offset-2 ring-offset-background"
                             : "opacity-80 hover:opacity-100")
                         }
-                        style={{
-                          background: `linear-gradient(90deg, ${THEMES[t.valeur].gauche}, ${THEMES[t.valeur].droite})`,
-                        }}
+                        style={{ background: THEMES[t.valeur].dominante }}
                       >
                         {actif && <Check className="size-5 text-white drop-shadow" />}
                       </button>

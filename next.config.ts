@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
   // inclusion explicite, le traçage de fichiers de Vercel ne les embarque pas dans
   // la fonction et la route /api/og échoue seulement en production.
   outputFileTracingIncludes: {
-    "/api/og/[id]": ["./public/fonts/**/*"],
+    "/api/og/[id]": ["./public/fonts/**/*", "./public/frames/**/*"],
   },
 };
 
