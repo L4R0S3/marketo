@@ -46,6 +46,7 @@ export const FaitsForm = z
     // le visuel n'affiche que prix_par_personne, toujours taxes incluses.
     prix_base: montantOuVide,
     taxes: montantOuVide,
+    prix_avant_rabais: montantOuVide,
     devise: z.string(),
     occupation: z.enum(["", "simple", "double", "triple", "quadruple"]),
     taxes_incluses: z.enum(["", "oui", "non"]),
@@ -203,6 +204,7 @@ export function offreVersFaitsForm(
     prix_par_personne: nombre(offre.prix_par_personne),
     prix_base: nombre(offre.prix_base),
     taxes: nombre(offre.taxes),
+    prix_avant_rabais: nombre(offre.prix_avant_rabais),
     devise: chaine(offre.devise),
     occupation: (chaine(offre.occupation) || "") as FaitsFormT["occupation"],
     taxes_incluses: offre.taxes_incluses == null ? "" : offre.taxes_incluses ? "oui" : "non",
@@ -291,6 +293,7 @@ export function faitsFormVersColonnes(d: FaitsFormT): Record<string, unknown> {
     prix_par_personne: Number(d.prix_par_personne.replace(",", ".")),
     prix_base: montant(d.prix_base),
     taxes: montant(d.taxes),
+    prix_avant_rabais: montant(d.prix_avant_rabais),
     devise: vide(d.devise),
     occupation: vide(d.occupation),
     taxes_incluses: d.taxes_incluses === "" ? null : d.taxes_incluses === "oui",

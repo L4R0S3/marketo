@@ -1,9 +1,12 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { htmlBlocOffre } from "@/lib/templates/email";
+import { SITE_URL } from "@/lib/marque";
 import { EtapeSorties } from "./EtapeSorties";
 
-// Étape 4 — les sorties. Phase 4 = le post Facebook, et rien d'autre : le PNG et
-// le texte de publication. Le bloc courriel et la landing page viendront plus tard.
+// Étape 4 — les sorties. Trois sections : le post social, le bloc courriel et la
+// landing page. Le HTML courriel est compilé ici, côté serveur : MJML n'a rien à
+// faire dans le navigateur.
 
 export default async function PageSorties({
   params,
@@ -29,12 +32,17 @@ export default async function PageSorties({
     unknown
   > | null;
 
+  const courriel = await htmlBlocOffre(id, "vedette");
+
   return (
     <EtapeSorties
       offreId={id}
       slug={offre.slug as string}
       titre={(fr?.titre as string) ?? ""}
       accroche={(fr?.accroche as string) ?? ""}
+      courrielHtml={courriel?.html ?? null}
+      publiee={offre.statut === "publiee"}
+      urlPublique={`${SITE_URL}/voyage/${offre.slug as string}`}
     />
   );
 }

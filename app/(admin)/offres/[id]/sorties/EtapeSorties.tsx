@@ -1,9 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, Download, RefreshCw } from "lucide-react";
+import Link from "next/link";
+import { Check, Copy, Download, ExternalLink, Mail, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ApercuCourriel } from "@/components/ApercuCourriel";
+import { CopierHtml } from "@/components/CopierHtml";
 import {
   Card,
   CardContent,
@@ -21,11 +24,17 @@ export function EtapeSorties({
   slug,
   titre,
   accroche,
+  courrielHtml,
+  publiee,
+  urlPublique,
 }: {
   offreId: string;
   slug: string;
   titre: string;
   accroche: string;
+  courrielHtml: string | null;
+  publiee: boolean;
+  urlPublique: string;
 }) {
   const [copie, setCopie] = useState(false);
   const [version, setVersion] = useState(0); // force le rechargement de l'image
@@ -104,17 +113,67 @@ export function EtapeSorties({
           </CardContent>
         </Card>
 
-        <Card className="border-dashed bg-transparent shadow-none">
+        {/* Bloc courriel */}
+        <Card>
           <CardHeader>
-            <CardTitle className="text-base font-medium text-muted-foreground">
-              À venir
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Mail className="size-4" />
+              Bloc courriel
             </CardTitle>
             <CardDescription>
-              Le bloc HTML pour Mailchimp et la landing page publique arrivent aux phases
-              suivantes. Cette étape ne produit pour l&apos;instant que le post Facebook et
-              Instagram.
+              Variante vedette, prête à coller dans Mailchimp. Pour un envoi qui regroupe
+              plusieurs offres, passe par une campagne.
             </CardDescription>
           </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {courrielHtml ? (
+              <>
+                <ApercuCourriel html={courrielHtml} hauteur={520} />
+                <div className="flex flex-wrap gap-2">
+                  <CopierHtml html={courrielHtml} />
+                  <Button asChild variant="outline">
+                    <Link href="/campagnes">Composer une campagne</Link>
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Le bloc courriel n&apos;a pas pu être généré pour cette offre.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Landing page */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ExternalLink className="size-4" />
+              Page de destination
+            </CardTitle>
+            <CardDescription>
+              {publiee
+                ? "En ligne : c'est la page vers laquelle pointent le post et le courriel."
+                : "L'offre doit être publiée pour que cette page réponde."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <code className="rounded-md bg-muted/50 p-3 text-xs break-all">{urlPublique}</code>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline" disabled={!publiee}>
+                <a href={`/voyage/${slug}`} target="_blank" rel="noreferrer">
+                  Ouvrir la page
+                </a>
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => navigator.clipboard.writeText(urlPublique)}
+              >
+                Copier le lien
+              </Button>
+            </div>
+          </CardContent>
         </Card>
       </div>
     </div>

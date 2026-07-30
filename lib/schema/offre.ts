@@ -65,6 +65,9 @@ const Formule = z.object({
   prix_par_personne: z.number().positive(), // toujours présent, jamais de sentinelle
   prix_base: z.number().positive().optional(), // prix avant taxes, omis si absent
   taxes: z.number().positive().optional(), // montant des taxes, omis si absent
+  // Tarif régulier annoncé barré (« rabais de 510 $ », « avant 2255 $ »). Sert
+  // au prix barré du bloc courriel ; omis si le document n'en annonce pas.
+  prix_avant_rabais: z.number().positive().optional(),
   taxes_incluses: z.boolean().optional(), // ce que dit le document, pour la traçabilité
 });
 

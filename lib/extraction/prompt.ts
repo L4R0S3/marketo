@@ -32,6 +32,7 @@ PRIX
 - Ne jamais inventer ni arrondir. prix_par_personne est le SEUL champ sans valeur d'absence possible : une offre sans prix n'est pas vendable. Si le prix principal est illisible, l'offre n'est pas exploitable → statut = "erreur". Tous les autres champs, dates comprises, ont une valeur d'absence.
 - Si le document affiche un prix de base ET des taxes séparément, extrais les trois : prix_par_personne = le total taxes incluses, prix_base = le prix avant taxes, taxes = le montant des taxes. Si le document n'affiche qu'un seul prix, c'est prix_par_personne ; prix_base et taxes restent omis.
 - Les trois montants sont PAR PERSONNE. Un total pour deux voyageurs (ex. colonne « Grtot » de Sirev) ne va dans aucun de ces champs.
+- prix_avant_rabais : le tarif RÉGULIER quand le document annonce une réduction (« avant 2255 $ », « rabais de 510 $ » → prix_avant_rabais = prix_par_personne + 510). Omets ce champ si aucun rabais n'est annoncé ; ne le déduis jamais d'une impression de bonne affaire.
 - taxes_incluses = ce que dit le document (true/false) ; omets ce champ s'il ne le précise pas. C'est une trace de la source, pas une consigne d'affichage.
 
 DEVISE

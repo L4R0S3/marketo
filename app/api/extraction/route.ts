@@ -146,6 +146,7 @@ async function etapeExtraction(supabase: Supabase, offreId: string) {
     prix_par_personne: faits.prix_par_personne,
     prix_base: faits.prix_base ?? null,
     taxes: faits.taxes ?? null,
+    prix_avant_rabais: faits.prix_avant_rabais ?? null,
     occupation: faits.occupation ?? null,
     taxes_incluses: faits.taxes_incluses ?? null,
     prix_valide_jusqua: faits.prix_valide_jusqua ?? null,

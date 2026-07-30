@@ -67,6 +67,11 @@ const CRITIQUES: Champ[] = [
 const AUTRES: Champ[] = [
   { cle: "prix_base", label: "Prix avant taxes", aide: "détail du document, jamais affiché" },
   { cle: "taxes", label: "Taxes", aide: "détail du document, jamais affiché" },
+  {
+    cle: "prix_avant_rabais",
+    label: "Prix avant rabais",
+    aide: "tarif régulier ; s'affiche barré dans le courriel",
+  },
   { cle: "theme_voyage", label: "Thème du voyage" },
   {
     cle: "type_produit",
