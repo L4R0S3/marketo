@@ -43,3 +43,7 @@ next-env.d.ts
 
 # rendus locaux du gabarit (script rendu-og)
 rendus/
+
+# La CLI Vercel ajoute « .vercel » et « .env* » à la fin du fichier ; les deux
+# sont déjà couverts plus haut, et un « .env* » placé APRÈS annulerait
+# l'exception « !.env.example ».
