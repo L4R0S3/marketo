@@ -17,6 +17,10 @@ export function PhotosSection({
   offreId: string;
   photos: Photo[];
 }) {
+  // Note : useActionState n'offre l'amélioration progressive qu'avec un
+  // `permalink`. Ce formulaire ne fonctionne donc qu'une fois la page hydratée —
+  // acceptable ici (tout l'écran dépend déjà de JavaScript), mais c'est ce qui l'a
+  // rendu totalement inerte tant qu'un <form> imbriqué cassait l'hydratation.
   const [etat, action, enCours] = useActionState(
     async (_prev: { error: string } | undefined, formData: FormData) =>
       await televerserPhotos(formData),
