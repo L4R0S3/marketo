@@ -15,9 +15,15 @@ import type { PostVisuelT } from "@/lib/templates/social/schema";
 
 const L = GEOMETRIE.largeur;
 const H = GEOMETRIE.hauteur;
-const MARGE = 56;
+const CONTENU_X = GEOMETRIE.bordure; // pastilles collées à la bordure intérieure
+const TITRE_X = 34;
+const MARGE_DROITE = 40;
 const BLANC = "#ffffff";
 const ENCRE = "#141414";
+
+// Même règle que le gabarit Satori : le titre remplit la largeur du bandeau.
+const tailleDuTitre = (titre: string) =>
+  Math.max(18, Math.min(150, Math.floor((L - TITRE_X - MARGE_DROITE) / (0.425 * Math.max(titre.length, 1)))));
 
 function Ligne({ texte, taille }: { texte: string; taille: number }) {
   return (
@@ -138,13 +144,13 @@ export function ApercuPost({
               display: "flex",
               alignItems: "center",
               height: GEOMETRIE.bandeauHaut,
-              padding: `0 ${MARGE}px`,
+              padding: `0 ${MARGE_DROITE}px 0 ${TITRE_X}px`,
             }}
           >
             <span
               style={{
                 color: BLANC,
-                fontSize: visuel.titre.length > 26 ? 76 : 92,
+                fontSize: tailleDuTitre(visuel.titre || "Titre du post"),
                 fontWeight: 900,
                 lineHeight: 1.05,
                 transform: "skewX(-12deg)",
@@ -155,11 +161,16 @@ export function ApercuPost({
             </span>
           </div>
 
+          {/* Sous la diagonale du frame : au-dessus, une pastille collée à
+              gauche chevaucherait le coin coupé. */}
           <div
             style={{
+              position: "absolute",
+              top: GEOMETRIE.contenuHaut,
+              left: CONTENU_X,
+              right: MARGE_DROITE,
               display: "flex",
               flexDirection: "column",
-              padding: `18px ${MARGE}px 0`,
             }}
           >
             <span
@@ -206,11 +217,11 @@ export function ApercuPost({
           <div
             style={{
               position: "absolute",
-              left: MARGE,
+              left: TITRE_X,
               bottom: 46,
               display: "flex",
               flexDirection: "column",
-              width: GEOMETRIE.signatureX - MARGE - 20,
+              width: GEOMETRIE.signatureX - TITRE_X - 20,
             }}
           >
             {double ? (
@@ -233,7 +244,7 @@ export function ApercuPost({
             <span
               style={{
                 position: "absolute",
-                right: MARGE,
+                right: MARGE_DROITE,
                 bottom: 150,
                 display: "inline-flex",
                 alignItems: "center",

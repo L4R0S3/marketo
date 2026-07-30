@@ -25,15 +25,29 @@ export const HAUTEUR = GEOMETRIE.hauteur;
 
 const BLANC = "#ffffff";
 const ENCRE = "#141414";
-const MARGE = 56; // marge du texte, à l'intérieur du cadre du frame
+
+// Calages horizontaux. Les pastilles sont collées à la bordure intérieure du
+// frame, comme sur les posts d'origine ; le titre, lui, prend quelques pixels de
+// plus, que l'inclinaison lui reprend visuellement (le bas des lettres penche
+// vers la gauche d'environ 0,2 × la taille de police).
+const CONTENU_X = GEOMETRIE.bordure; // 22 — bord gauche des pastilles
+const TITRE_X = 34;
+const MARGE_DROITE = 40;
 
 // Satori ne mesure pas le texte avant le rendu : une chaîne trop longue passerait
 // à la ligne alors que le gabarit exige UNE ligne (titre, bandeau). On dimensionne
 // donc d'après la longueur, avec l'avance moyenne mesurée sur les rendus réels —
-// 0,44 em pour Anton, 0,56 em pour Raleway 700 en majuscules.
+// 0,425 em pour Anton, 0,56 em pour Raleway 700 en majuscules.
 function tailleQuiTient(texte: string, largeur: number, avance: number, max: number) {
   const n = Math.max(texte.length, 1);
   return Math.max(18, Math.min(max, Math.floor(largeur / (avance * n))));
+}
+
+// Le titre remplit la largeur du bandeau : plus il est court, plus il est gros.
+// Le plafond vient de la hauteur du bandeau (211 px, interligne compris), pas de
+// la largeur — un titre très court ne doit pas déborder verticalement.
+function tailleDuTitre(titre: string) {
+  return tailleQuiTient(titre, LARGEUR - TITRE_X - MARGE_DROITE, 0.425, 150);
 }
 
 // Une ligne de bloc : pastille blanche épousant la largeur du texte. Les segments
@@ -210,14 +224,14 @@ export function Gabarit({ visuel, frame }: { visuel: PostVisuelT; frame: string 
             display: "flex",
             alignItems: "center",
             height: GEOMETRIE.bandeauHaut,
-            paddingLeft: MARGE,
-            paddingRight: MARGE,
+            paddingLeft: TITRE_X,
+            paddingRight: MARGE_DROITE,
           }}
         >
           <span
             style={{
               fontFamily: "Anton",
-              fontSize: tailleQuiTient(visuel.titre, LARGEUR - 2 * MARGE - 20, 0.44, 92),
+              fontSize: tailleDuTitre(visuel.titre),
               lineHeight: 1.05,
               color: BLANC,
               textShadow: "0 6px 18px rgba(0,0,0,.45)",
@@ -228,14 +242,17 @@ export function Gabarit({ visuel, frame }: { visuel: PostVisuelT; frame: string 
           </span>
         </div>
 
-        {/* Bandeau et blocs, dans la fenêtre transparente */}
+        {/* Bandeau et blocs. Placés SOUS la diagonale du frame (y = 400) : plus
+            haut, la fenêtre est encore rognée par le coin coupé et une pastille
+            collée à gauche chevaucherait le cadre. */}
         <div
           style={{
+            position: "absolute",
+            top: GEOMETRIE.contenuHaut,
+            left: CONTENU_X,
+            right: MARGE_DROITE,
             display: "flex",
             flexDirection: "column",
-            paddingLeft: MARGE,
-            paddingRight: MARGE,
-            paddingTop: 18,
           }}
         >
           <div
@@ -257,7 +274,7 @@ export function Gabarit({ visuel, frame }: { visuel: PostVisuelT; frame: string 
               style={{
                 fontFamily: "Raleway",
                 fontWeight: 700,
-                fontSize: tailleQuiTient(visuel.bandeau, 830, 0.56, 34),
+                fontSize: tailleQuiTient(visuel.bandeau, 880, 0.56, 34),
                 color: ENCRE,
               }}
             >
@@ -276,11 +293,11 @@ export function Gabarit({ visuel, frame }: { visuel: PostVisuelT; frame: string 
         <div
           style={{
             position: "absolute",
-            left: MARGE,
+            left: TITRE_X,
             bottom: 46,
             display: "flex",
             flexDirection: "column",
-            width: GEOMETRIE.signatureX - MARGE - 20,
+            width: GEOMETRIE.signatureX - TITRE_X - 20,
           }}
         >
           {double ? (
@@ -303,7 +320,7 @@ export function Gabarit({ visuel, frame }: { visuel: PostVisuelT; frame: string 
           <div
             style={{
               position: "absolute",
-              right: MARGE,
+              right: MARGE_DROITE,
               bottom: 150,
               display: "flex",
               flexDirection: "row",

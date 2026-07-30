@@ -51,6 +51,12 @@ export const GEOMETRIE = {
   bandeauHaut: 211,
   /** Épaisseur du cadre sur les côtés et en bas. */
   bordure: 22,
+  /**
+   * Le coin supérieur gauche de la fenêtre est coupé en diagonale : son bord
+   * gauche descend de x=178 (y=215) à x=22 (y=400). En dessous de cette ligne
+   * seulement, le contenu peut être calé contre la bordure intérieure.
+   */
+  contenuHaut: 400,
   /** Le bloc signature occupe le bas à partir de cette abscisse. */
   signatureX: 560,
 } as const;
