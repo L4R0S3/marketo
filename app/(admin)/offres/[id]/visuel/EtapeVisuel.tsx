@@ -154,8 +154,13 @@ export function EtapeVisuel({
         )}
       </div>
 
-      {/* Volet droit : les contrôles */}
-      <form className="flex flex-col gap-5">
+      {/* Volet droit : les contrôles.
+          PhotosSection porte ses PROPRES <form> (téléversement, hero, suppression)
+          et reste donc HORS du formulaire du texte : le HTML interdit d'imbriquer
+          des formulaires, le parseur jette la balise interne, et le bouton
+          « Ajouter les photos » finissait par soumettre le formulaire principal.
+          Ce sont de toute façon deux actions serveur distinctes. */}
+      <div className="flex flex-col gap-5">
         {composition === "encours" && (
           <p className="rounded-md border border-dashed p-3 text-sm">
             Composition du texte en cours — une quinzaine de secondes.
@@ -172,237 +177,242 @@ export function EtapeVisuel({
           </div>
         )}
 
-        {/* Photo */}
+        {/* Photo — son propre formulaire */}
         <section className="flex flex-col gap-2 rounded-md border p-3">
           <PhotosSection offreId={offreId} photos={photos} />
         </section>
 
-        {/* Habillage */}
-        <section className="flex flex-col gap-3 rounded-md border p-3">
-          <div className="flex flex-col gap-2">
-            <Label>Thème</Label>
-            <div className="flex flex-wrap gap-2">
-              {NOMS_THEMES.map((t) => {
-                const actif = valeurs.theme === t.valeur;
-                return (
-                  <button
-                    key={t.valeur}
+        {/* Formulaire du texte, du thème et du cadrage. onSubmit neutralisé :
+            la touche Entrée dans un champ provoquerait une soumission implicite
+            et un rechargement de page. */}
+        <form className="flex flex-col gap-5" onSubmit={(ev) => ev.preventDefault()}>
+          {/* Habillage */}
+          <section className="flex flex-col gap-3 rounded-md border p-3">
+            <div className="flex flex-col gap-2">
+              <Label>Thème</Label>
+              <div className="flex flex-wrap gap-2">
+                {NOMS_THEMES.map((t) => {
+                  const actif = valeurs.theme === t.valeur;
+                  return (
+                    <button
+                      key={t.valeur}
+                      type="button"
+                      title={t.nom}
+                      onClick={() => setValue("theme", t.valeur, { shouldDirty: true })}
+                      className={
+                        "h-9 w-9 rounded-full border-2 " +
+                        (actif ? "border-foreground ring-2 ring-foreground/30" : "border-transparent")
+                      }
+                      style={{
+                        background: `linear-gradient(90deg, ${THEMES[t.valeur].gauche}, ${THEMES[t.valeur].droite})`,
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label>Cadrage de la photo</Label>
+              <div className="flex gap-2">
+                {(["haut", "centre", "bas"] as const).map((f) => (
+                  <Button
+                    key={f}
                     type="button"
-                    title={t.nom}
-                    onClick={() => setValue("theme", t.valeur, { shouldDirty: true })}
-                    className={
-                      "h-9 w-9 rounded-full border-2 " +
-                      (actif ? "border-foreground ring-2 ring-foreground/30" : "border-transparent")
-                    }
-                    style={{
-                      background: `linear-gradient(90deg, ${THEMES[t.valeur].gauche}, ${THEMES[t.valeur].droite})`,
-                    }}
-                  />
-                );
-              })}
+                    size="sm"
+                    variant={valeurs.focale === f ? "default" : "outline"}
+                    onClick={() => setValue("focale", f, { shouldDirty: true })}
+                  >
+                    {f}
+                  </Button>
+                ))}
+              </div>
             </div>
-          </div>
+          </section>
 
-          <div className="flex flex-col gap-2">
-            <Label>Cadrage de la photo</Label>
-            <div className="flex gap-2">
-              {(["haut", "centre", "bas"] as const).map((f) => (
-                <Button
-                  key={f}
-                  type="button"
-                  size="sm"
-                  variant={valeurs.focale === f ? "default" : "outline"}
-                  onClick={() => setValue("focale", f, { shouldDirty: true })}
-                >
-                  {f}
-                </Button>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Texte du visuel */}
-        <section className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Texte du post</h2>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={composition === "encours"}
-              onClick={composer}
-            >
-              {composition === "encours" ? "Composition…" : "Régénérer le texte"}
-            </Button>
-          </div>
-
-          <div className="flex flex-col gap-1">
+          {/* Texte du visuel */}
+          <section className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
-              <Label htmlFor="titre">Titre</Label>
-              <Compteur valeur={valeurs.titre ?? ""} max={LIMITES.titre} />
-            </div>
-            <Input id="titre" {...register("titre")} />
-            {e.titre && <p className="text-xs text-destructive">{e.titre.message}</p>}
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="bandeau">Bandeau</Label>
-              <Compteur valeur={valeurs.bandeau ?? ""} max={LIMITES.bandeau} />
-            </div>
-            <Input id="bandeau" {...register("bandeau")} />
-            {e.bandeau && <p className="text-xs text-destructive">{e.bandeau.message}</p>}
-          </div>
-
-          {colonnes.fields.map((champ, i) => (
-            <ColonneEdit
-              key={champ.id}
-              index={i}
-              control={control}
-              register={register}
-              valeurs={valeurs}
-              supprimable={colonnes.fields.length > 1}
-              onSupprimer={() => colonnes.remove(i)}
-            />
-          ))}
-
-          {colonnes.fields.length < LIMITES.colonnes && (
-            <div>
+              <h2 className="text-sm font-semibold">Texte du post</h2>
               <Button
                 type="button"
-                variant="outline"
+                variant="secondary"
                 size="sm"
-                onClick={() =>
-                  colonnes.append({
-                    entete: "",
-                    blocs: [{ texte: "" }],
-                    surtitre: "À partir de seulement",
-                    montant: "",
-                    mentions: "",
-                  })
-                }
+                disabled={composition === "encours"}
+                onClick={composer}
               >
-                Ajouter la seconde colonne (comparaison)
+                {composition === "encours" ? "Composition…" : "Régénérer le texte"}
               </Button>
             </div>
-          )}
 
-          <div className="flex flex-col gap-2 rounded-md border p-3">
-            <label className="flex items-center gap-2 text-sm font-medium">
-              <input type="checkbox" {...register("prix_secondaire_actif")} />
-              Prix secondaire (supplément : plan boissons, wifi…)
-            </label>
-            {valeurs.prix_secondaire_actif && (
-              <div className="grid gap-2 sm:grid-cols-3">
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between">
-                    <Label>Surtitre</Label>
-                    <Compteur
-                      valeur={valeurs.prix_secondaire?.surtitre ?? ""}
-                      max={LIMITES.surtitre}
-                    />
-                  </div>
-                  <Input {...register("prix_secondaire.surtitre")} />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Label>Montant</Label>
-                  <Input {...register("prix_secondaire.montant")} />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Label>Mentions (une par ligne)</Label>
-                  <Textarea rows={3} {...register("prix_secondaire.mentions")} />
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-2 rounded-md border p-3">
-            <label className="flex items-center gap-2 text-sm font-medium">
-              <input type="checkbox" {...register("badge_actif")} />
-              Badge (départs alternatifs)
-            </label>
-            {valeurs.badge_actif && (
-              <div className="grid gap-2 sm:grid-cols-2">
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between">
-                    <Label>Texte</Label>
-                    <Compteur valeur={valeurs.badge?.texte ?? ""} max={LIMITES.badge} />
-                  </div>
-                  <Input {...register("badge.texte")} />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Label>Icône (code aéroport)</Label>
-                  <Input placeholder="yqb" {...register("badge.icone")} />
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* Texte de publication et FAQ : utiles à l'étape suivante et à la landing page */}
-        <details className="rounded-md border p-3">
-          <summary className="cursor-pointer text-sm font-semibold">
-            Texte de publication et FAQ
-          </summary>
-          <div className="mt-3 flex flex-col gap-3">
             <div className="flex flex-col gap-1">
               <div className="flex items-center justify-between">
-                <Label htmlFor="accroche">Accroche (texte du post)</Label>
-                <Compteur valeur={valeurs.accroche ?? ""} max={LIMITES_TEXTE.accroche} />
+                <Label htmlFor="titre">Titre</Label>
+                <Compteur valeur={valeurs.titre ?? ""} max={LIMITES.titre} />
               </div>
-              <Textarea id="accroche" rows={4} {...register("accroche")} />
+              <Input id="titre" {...register("titre")} />
+              {e.titre && <p className="text-xs text-destructive">{e.titre.message}</p>}
             </div>
 
-            {faq.fields.map((champ, i) => (
-              <div key={champ.id} className="flex flex-col gap-1 rounded-md border p-2">
-                <div className="flex items-center justify-between">
-                  <Label>Question {i + 1}</Label>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => faq.remove(i)}>
-                    Retirer
-                  </Button>
-                </div>
-                <Input {...register(`faq.${i}.q`)} />
-                <Textarea rows={2} {...register(`faq.${i}.r`)} />
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="bandeau">Bandeau</Label>
+                <Compteur valeur={valeurs.bandeau ?? ""} max={LIMITES.bandeau} />
               </div>
+              <Input id="bandeau" {...register("bandeau")} />
+              {e.bandeau && <p className="text-xs text-destructive">{e.bandeau.message}</p>}
+            </div>
+
+            {colonnes.fields.map((champ, i) => (
+              <ColonneEdit
+                key={champ.id}
+                index={i}
+                control={control}
+                register={register}
+                valeurs={valeurs}
+                supprimable={colonnes.fields.length > 1}
+                onSupprimer={() => colonnes.remove(i)}
+              />
             ))}
-            <div>
+
+            {colonnes.fields.length < LIMITES.colonnes && (
+              <div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    colonnes.append({
+                      entete: "",
+                      blocs: [{ texte: "" }],
+                      surtitre: "À partir de seulement",
+                      montant: "",
+                      mentions: "",
+                    })
+                  }
+                >
+                  Ajouter la seconde colonne (comparaison)
+                </Button>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2 rounded-md border p-3">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input type="checkbox" {...register("prix_secondaire_actif")} />
+                Prix secondaire (supplément : plan boissons, wifi…)
+              </label>
+              {valeurs.prix_secondaire_actif && (
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between">
+                      <Label>Surtitre</Label>
+                      <Compteur
+                        valeur={valeurs.prix_secondaire?.surtitre ?? ""}
+                        max={LIMITES.surtitre}
+                      />
+                    </div>
+                    <Input {...register("prix_secondaire.surtitre")} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label>Montant</Label>
+                    <Input {...register("prix_secondaire.montant")} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label>Mentions (une par ligne)</Label>
+                    <Textarea rows={3} {...register("prix_secondaire.mentions")} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2 rounded-md border p-3">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input type="checkbox" {...register("badge_actif")} />
+                Badge (départs alternatifs)
+              </label>
+              {valeurs.badge_actif && (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between">
+                      <Label>Texte</Label>
+                      <Compteur valeur={valeurs.badge?.texte ?? ""} max={LIMITES.badge} />
+                    </div>
+                    <Input {...register("badge.texte")} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label>Icône (code aéroport)</Label>
+                    <Input placeholder="yqb" {...register("badge.icone")} />
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Texte de publication et FAQ : utiles à l'étape suivante et à la landing page */}
+          <details className="rounded-md border p-3">
+            <summary className="cursor-pointer text-sm font-semibold">
+              Texte de publication et FAQ
+            </summary>
+            <div className="mt-3 flex flex-col gap-3">
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="accroche">Accroche (texte du post)</Label>
+                  <Compteur valeur={valeurs.accroche ?? ""} max={LIMITES_TEXTE.accroche} />
+                </div>
+                <Textarea id="accroche" rows={4} {...register("accroche")} />
+              </div>
+
+              {faq.fields.map((champ, i) => (
+                <div key={champ.id} className="flex flex-col gap-1 rounded-md border p-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Question {i + 1}</Label>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => faq.remove(i)}>
+                      Retirer
+                    </Button>
+                  </div>
+                  <Input {...register(`faq.${i}.q`)} />
+                  <Textarea rows={2} {...register(`faq.${i}.r`)} />
+                </div>
+              ))}
+              <div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => faq.append({ q: "", r: "" })}
+                >
+                  Ajouter une question
+                </Button>
+              </div>
+            </div>
+          </details>
+
+          {/* Barre d'action */}
+          <div className="sticky bottom-0 flex flex-col gap-2 border-t bg-background py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                disabled={enCours}
+                onClick={soumettre(validerOffre, () => router.push(`/offres/${offreId}/sorties`))}
+              >
+                Valider et télécharger
+              </Button>
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
-                onClick={() => faq.append({ q: "", r: "" })}
+                disabled={enCours}
+                onClick={soumettre(enregistrerVisuel)}
               >
-                Ajouter une question
+                Enregistrer sans valider
               </Button>
+              {statut !== "brouillon" && (
+                <span className="text-xs text-muted-foreground">Offre déjà {statut}.</span>
+              )}
             </div>
+            {message && <p className="text-sm text-destructive">{message}</p>}
           </div>
-        </details>
-
-        {/* Barre d'action */}
-        <div className="sticky bottom-0 flex flex-col gap-2 border-t bg-background py-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              disabled={enCours}
-              onClick={soumettre(validerOffre, () => router.push(`/offres/${offreId}/sorties`))}
-            >
-              Valider et télécharger
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={enCours}
-              onClick={soumettre(enregistrerVisuel)}
-            >
-              Enregistrer sans valider
-            </Button>
-            {statut !== "brouillon" && (
-              <span className="text-xs text-muted-foreground">Offre déjà {statut}.</span>
-            )}
-          </div>
-          {message && <p className="text-sm text-destructive">{message}</p>}
-        </div>
-      </form>
+        </form>
+      </div>
     </div>
   );
 }

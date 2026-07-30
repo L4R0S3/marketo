@@ -262,7 +262,10 @@ export function EtapeFaits({
       </div>
 
       {/* Volet droit : les faits */}
-      <form className="flex flex-col gap-5">
+      {/* onSubmit neutralisé : aucun bouton n'est de type submit ici, mais la
+          touche Entrée dans un champ déclencherait une soumission implicite —
+          donc un rechargement de page et la perte des corrections en cours. */}
+      <form className="flex flex-col gap-5" onSubmit={(ev) => ev.preventDefault()}>
         {extraction === "encours" && (
           <p className="rounded-md border border-dashed p-3 text-sm">
             Extraction en cours — le modèle lit le document, une quinzaine de secondes.
