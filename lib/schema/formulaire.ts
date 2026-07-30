@@ -2,11 +2,13 @@ import { z } from "zod";
 import { LIMITES, type PostVisuelT, type ThemeT } from "@/lib/templates/social/schema";
 import { LIMITES_TEXTE, type CompositionT } from "@/lib/composition/schema";
 
-// Schéma du FORMULAIRE DE VALIDATION (phase 3). Il ne remplace pas les schémas
-// d'extraction : c'est la forme éditable par l'humain, en chaînes de caractères
-// (ce que rendent les <input>), avec les mêmes limites de longueur que le gabarit.
-// Il sert au client (react-hook-form + zodResolver) ET au serveur (l'action
-// revalide, elle ne fait jamais confiance au navigateur).
+// Schémas des FORMULAIRES du flux de validation, en deux étapes indépendantes :
+//   • FaitsForm   (étape 2) — ce que l'IA a extrait, corrigé par l'humain
+//   • VisuelForm  (étape 3) — le texte du post, la photo et l'habillage
+// Ils ne remplacent pas les schémas d'extraction : c'est la forme éditable, en
+// chaînes de caractères (ce que rendent les <input>), avec les mêmes limites que
+// le gabarit. Ils servent au client (react-hook-form) ET au serveur, qui revalide
+// toujours — le navigateur peut mentir et une erreur de prix a un coût réel.
 //
 // Conventions : un champ texte vide vaut « absent » et devient NULL en colonne ;
 // les listes s'éditent une entrée par ligne dans un <textarea>.
@@ -18,8 +20,9 @@ const entierOuVide = z
   .regex(/^\d*$/, "nombre entier attendu")
   .refine((v) => v === "" || Number(v) > 0, "doit être supérieur à 0");
 
-export const FormulaireOffre = z.object({
-  faits: z.object({
+// ── Étape 2 : les faits ────────────────────────────────────────────────────
+export const FaitsForm = z
+  .object({
     theme_voyage: z.string(),
     type_produit: z.enum(["", "forfait", "croisiere", "circuit"]),
     fournisseur: z.string(),
@@ -51,15 +54,24 @@ export const FormulaireOffre = z.object({
     inclusions: z.string(), // une par ligne
     exclusions: z.string(),
     itineraire: z.string(), // une étape par ligne
-  }),
-  texte: z.object({
+  })
+  .refine((d) => !(d.date_depart && d.date_retour) || d.date_retour >= d.date_depart, {
+    message: "le retour précède le départ",
+    path: ["date_retour"],
+  });
+
+export type FaitsFormT = z.infer<typeof FaitsForm>;
+
+// ── Étape 3 : le visuel ────────────────────────────────────────────────────
+export const VisuelForm = z
+  .object({
     titre: z.string().min(1, "titre obligatoire").max(LIMITES.titre),
     bandeau: z.string().max(LIMITES.bandeau),
     colonnes: z
       .array(
         z.object({
           entete: z.string().max(LIMITES.entete),
-          // Un bloc = 1 ou 2 lignes, éditées comme deux lignes d'un textarea.
+          // Un bloc = 1 ou 2 lignes du visuel, éditées comme deux lignes de texte.
           blocs: z.array(z.object({ texte: z.string() })).min(1).max(LIMITES.blocs),
           surtitre: z.string().max(LIMITES.surtitre),
           montant: z.string().regex(/^\d+$/, "montant entier attendu"),
@@ -83,36 +95,24 @@ export const FormulaireOffre = z.object({
         r: z.string().min(1, "réponse obligatoire").max(LIMITES_TEXTE.reponse),
       }),
     ),
-  }),
-  habillage: z.object({
     theme: z.enum(["framboise", "sarcelle", "azur", "ambre", "olive", "prune"]),
     focale: z.enum(["haut", "centre", "bas"]),
-  }),
-})
-  .superRefine((f, ctx) => {
-    // Cohérences que les champs isolés ne peuvent pas voir.
-    const d = f.faits;
-    if (d.date_depart && d.date_retour && d.date_retour < d.date_depart)
-      ctx.addIssue({
-        code: "custom",
-        path: ["faits", "date_retour"],
-        message: "le retour précède le départ",
-      });
-
-    f.texte.colonnes.forEach((col, i) => {
+  })
+  .superRefine((v, ctx) => {
+    v.colonnes.forEach((col, i) => {
       col.blocs.forEach((b, j) => {
         const lignes = decouper(b.texte);
         if (lignes.length < 1 || lignes.length > LIMITES.lignes)
           ctx.addIssue({
             code: "custom",
-            path: ["texte", "colonnes", i, "blocs", j, "texte"],
+            path: ["colonnes", i, "blocs", j, "texte"],
             message: `${lignes.length} ligne(s) : un bloc en compte 1 ou ${LIMITES.lignes}`,
           });
         lignes.forEach((l) => {
           if (l.length > LIMITES.ligne)
             ctx.addIssue({
               code: "custom",
-              path: ["texte", "colonnes", i, "blocs", j, "texte"],
+              path: ["colonnes", i, "blocs", j, "texte"],
               message: `ligne de ${l.length} caractères, maximum ${LIMITES.ligne}`,
             });
         });
@@ -121,34 +121,34 @@ export const FormulaireOffre = z.object({
       if (mentions.length > LIMITES.mentions)
         ctx.addIssue({
           code: "custom",
-          path: ["texte", "colonnes", i, "mentions"],
+          path: ["colonnes", i, "mentions"],
           message: `${mentions.length} mentions, maximum ${LIMITES.mentions}`,
         });
       mentions.forEach((m) => {
         if (m.length > LIMITES.mention)
           ctx.addIssue({
             code: "custom",
-            path: ["texte", "colonnes", i, "mentions"],
+            path: ["colonnes", i, "mentions"],
             message: `« ${m} » fait ${m.length} caractères, maximum ${LIMITES.mention}`,
           });
       });
     });
 
-    if (f.texte.prix_secondaire_actif && !/^\d+$/.test(f.texte.prix_secondaire.montant))
+    if (v.prix_secondaire_actif && !/^\d+$/.test(v.prix_secondaire.montant))
       ctx.addIssue({
         code: "custom",
-        path: ["texte", "prix_secondaire", "montant"],
+        path: ["prix_secondaire", "montant"],
         message: "montant entier attendu",
       });
-    if (f.texte.badge_actif && f.texte.badge.texte.trim() === "")
+    if (v.badge_actif && v.badge.texte.trim() === "")
       ctx.addIssue({
         code: "custom",
-        path: ["texte", "badge", "texte"],
+        path: ["badge", "texte"],
         message: "texte du badge obligatoire",
       });
   });
 
-export type FormulaireOffreT = z.infer<typeof FormulaireOffre>;
+export type VisuelFormT = z.infer<typeof VisuelForm>;
 
 // ── Conversions ────────────────────────────────────────────────────────────
 
@@ -161,22 +161,66 @@ export function decouper(texte: string): string[] {
 
 const joindre = (v: unknown): string =>
   Array.isArray(v) ? v.map((x) => String(x)).join("\n") : "";
-
 const chaine = (v: unknown): string => (v == null ? "" : String(v));
 const nombre = (v: unknown): string => (v == null ? "" : String(v));
 
-// Faits + composition (sortie de l'Appel 2) → valeurs par défaut du formulaire.
-export function offreVersFormulaire(
+// Colonnes de l'offre + faits sans colonne → valeurs de l'étape 2.
+export function offreVersFaitsForm(
   offre: Record<string, unknown>,
   extraction: Record<string, unknown>,
-  composition: Partial<CompositionT> | null,
   contenusFr: Record<string, unknown> | null,
-): FormulaireOffreT {
-  const visuel = (contenusFr?.visuel ?? null) as PostVisuelT | null;
-  const source = composition ?? null;
+): FaitsFormT {
+  const itineraire = Array.isArray(contenusFr?.itineraire)
+    ? (contenusFr.itineraire as Array<Record<string, unknown>>)
+        .map((e) => chaine(e.titre))
+        .join("\n")
+    : Array.isArray(extraction.itineraire)
+      ? (extraction.itineraire as Array<Record<string, unknown>>)
+          .map((e) => chaine(e.lieu) + (e.pays ? ` (${chaine(e.pays)})` : ""))
+          .join("\n")
+      : "";
 
+  return {
+    theme_voyage: chaine(extraction.theme_voyage),
+    type_produit: (chaine(offre.type_produit) || "") as FaitsFormT["type_produit"],
+    fournisseur: chaine(offre.fournisseur),
+    destination_pays: chaine(offre.destination_pays),
+    destination_ville: chaine(offre.destination_ville),
+    date_depart: chaine(offre.date_depart),
+    date_retour: chaine(offre.date_retour),
+    duree_nuits: nombre(offre.duree_nuits),
+    duree_jours: nombre(offre.duree_jours),
+    prix_par_personne: nombre(offre.prix_par_personne),
+    devise: chaine(offre.devise),
+    occupation: (chaine(offre.occupation) || "") as FaitsFormT["occupation"],
+    taxes_incluses: offre.taxes_incluses == null ? "" : offre.taxes_incluses ? "oui" : "non",
+    prix_valide_jusqua: chaine(offre.prix_valide_jusqua),
+    compagnie_aerienne: chaine(offre.compagnie_aerienne),
+    aeroport_depart: chaine(offre.aeroport_depart),
+    aeroports_alternatifs: Array.isArray(offre.aeroports_alternatifs)
+      ? (offre.aeroports_alternatifs as string[]).join(", ")
+      : "",
+    etablissement_nom: chaine(offre.etablissement_nom),
+    etablissement_type: (chaine(offre.etablissement_type) || "") as FaitsFormT["etablissement_type"],
+    etablissement_categorie: chaine(offre.etablissement_categorie),
+    type_cabine: chaine(offre.type_cabine),
+    lien_reservation: chaine(offre.lien_reservation),
+    lien_tripadvisor: chaine(offre.lien_tripadvisor),
+    lien_monarc: chaine(offre.lien_monarc),
+    inclusions: joindre(contenusFr?.inclusions ?? extraction.inclusions),
+    exclusions: joindre(contenusFr?.exclusions ?? extraction.exclusions),
+    itineraire,
+  };
+}
+
+// Composition (Appel 2) ou contenus.fr déjà édité → valeurs de l'étape 3.
+export function compositionVersVisuelForm(
+  composition: Partial<CompositionT> | null,
+  visuel: PostVisuelT | null,
+  prixParDefaut: string,
+): VisuelFormT {
   const colonnes =
-    source?.colonnes?.map((c) => ({
+    composition?.colonnes?.map((c) => ({
       entete: c.entete ?? "",
       blocs: (c.blocs ?? []).map((b) => ({ texte: (b.lignes ?? []).join("\n") })),
       surtitre: c.prix?.surtitre ?? "À partir de seulement",
@@ -184,79 +228,37 @@ export function offreVersFormulaire(
       mentions: (c.prix?.mentions ?? []).join("\n"),
     })) ?? [];
 
-  const itineraire = Array.isArray(extraction.itineraire)
-    ? (extraction.itineraire as Array<Record<string, unknown>>)
-        .map((e) => chaine(e.lieu) + (e.pays ? ` (${chaine(e.pays)})` : ""))
-        .join("\n")
-    : "";
-
   return {
-    faits: {
-      theme_voyage: chaine(extraction.theme_voyage),
-      type_produit: (chaine(offre.type_produit) || "") as "" | "forfait" | "croisiere" | "circuit",
-      fournisseur: chaine(offre.fournisseur),
-      destination_pays: chaine(offre.destination_pays),
-      destination_ville: chaine(offre.destination_ville),
-      date_depart: chaine(offre.date_depart),
-      date_retour: chaine(offre.date_retour),
-      duree_nuits: nombre(offre.duree_nuits),
-      duree_jours: nombre(offre.duree_jours),
-      prix_par_personne: nombre(offre.prix_par_personne),
-      devise: chaine(offre.devise),
-      occupation: (chaine(offre.occupation) || "") as "" | "simple" | "double" | "triple" | "quadruple",
-      taxes_incluses: offre.taxes_incluses == null ? "" : offre.taxes_incluses ? "oui" : "non",
-      prix_valide_jusqua: chaine(offre.prix_valide_jusqua),
-      compagnie_aerienne: chaine(offre.compagnie_aerienne),
-      aeroport_depart: chaine(offre.aeroport_depart),
-      aeroports_alternatifs: Array.isArray(offre.aeroports_alternatifs)
-        ? (offre.aeroports_alternatifs as string[]).join(", ")
-        : "",
-      etablissement_nom: chaine(offre.etablissement_nom),
-      etablissement_type: (chaine(offre.etablissement_type) || "") as "" | "hotel" | "navire" | "multiple",
-      etablissement_categorie: chaine(offre.etablissement_categorie),
-      type_cabine: chaine(offre.type_cabine),
-      lien_reservation: chaine(offre.lien_reservation),
-      lien_tripadvisor: chaine(offre.lien_tripadvisor),
-      lien_monarc: chaine(offre.lien_monarc),
-      inclusions: joindre(contenusFr?.inclusions ?? extraction.inclusions),
-      exclusions: joindre(contenusFr?.exclusions ?? extraction.exclusions),
-      itineraire,
+    titre: composition?.titre ?? "",
+    bandeau: composition?.bandeau ?? "",
+    colonnes: colonnes.length
+      ? colonnes
+      : [
+          {
+            entete: "",
+            blocs: [{ texte: "" }],
+            surtitre: "À partir de seulement",
+            montant: prixParDefaut,
+            mentions: "",
+          },
+        ],
+    prix_secondaire_actif: composition?.prix_secondaire != null,
+    prix_secondaire: {
+      surtitre: composition?.prix_secondaire?.surtitre ?? "",
+      montant: nombre(composition?.prix_secondaire?.montant),
+      mentions: (composition?.prix_secondaire?.mentions ?? []).join("\n"),
     },
-    texte: {
-      titre: source?.titre ?? chaine(contenusFr?.titre),
-      bandeau: source?.bandeau ?? "",
-      colonnes: colonnes.length
-        ? colonnes
-        : [
-            {
-              entete: "",
-              blocs: [{ texte: "" }],
-              surtitre: "À partir de seulement",
-              montant: nombre(offre.prix_par_personne),
-              mentions: "",
-            },
-          ],
-      prix_secondaire_actif: source?.prix_secondaire != null,
-      prix_secondaire: {
-        surtitre: source?.prix_secondaire?.surtitre ?? "",
-        montant: nombre(source?.prix_secondaire?.montant),
-        mentions: (source?.prix_secondaire?.mentions ?? []).join("\n"),
-      },
-      badge_actif: source?.badge != null,
-      badge: { texte: source?.badge?.texte ?? "", icone: source?.badge?.icone ?? "" },
-      accroche: source?.accroche ?? chaine(contenusFr?.accroche),
-      faq: (source?.faq as Array<{ q: string; r: string }> | undefined) ?? [],
-    },
-    habillage: {
-      theme: (visuel?.theme ?? "azur") as ThemeT,
-      focale: visuel?.photo?.focale ?? "centre",
-    },
+    badge_actif: composition?.badge != null,
+    badge: { texte: composition?.badge?.texte ?? "", icone: composition?.badge?.icone ?? "" },
+    accroche: composition?.accroche ?? "",
+    faq: (composition?.faq as Array<{ q: string; r: string }> | undefined) ?? [],
+    theme: (visuel?.theme ?? "azur") as ThemeT,
+    focale: visuel?.photo?.focale ?? "centre",
   };
 }
 
-// Formulaire → colonnes de la table offres. Un champ vide devient NULL.
-export function formulaireVersColonnes(f: FormulaireOffreT): Record<string, unknown> {
-  const d = f.faits;
+// Étape 2 → colonnes de la table offres. Un champ vide devient NULL.
+export function faitsFormVersColonnes(d: FaitsFormT): Record<string, unknown> {
   const vide = (s: string) => (s.trim() === "" ? null : s.trim());
   const entier = (s: string) => (s.trim() === "" ? null : Number(s));
   const alternatifs = d.aeroports_alternatifs
@@ -291,63 +293,80 @@ export function formulaireVersColonnes(f: FormulaireOffreT): Record<string, unkn
   };
 }
 
-// Formulaire → PostVisuel (le gabarit) : c'est ici que la photo hero et le thème
-// choisi par l'opérateur rejoignent le texte.
-export function formulaireVersVisuel(
-  f: FormulaireOffreT,
-  heroUrl: string,
-): PostVisuelT {
-  // `|| 0` : la fonction sert aussi à l'aperçu en direct, où le champ montant est
-  // transitoirement vide pendant la saisie. L'action, elle, a déjà revalidé.
+// Étape 2 → part de contenus.fr qui lui appartient (listes factuelles).
+export function faitsFormVersContenus(d: FaitsFormT): Record<string, unknown> {
+  return {
+    inclusions: decouper(d.inclusions),
+    exclusions: decouper(d.exclusions),
+    // Le texte détaillé de chaque étape appartient à la landing page (phase 6).
+    itineraire: decouper(d.itineraire).map((titre, i) => ({ jour: i + 1, titre, texte: "" })),
+  };
+}
+
+// Étape 3 → PostVisuel : le texte rejoint la photo hero et l'habillage choisi.
+export function visuelFormVersPostVisuel(v: VisuelFormT, heroUrl: string): PostVisuelT {
+  // `|| 0` : sert aussi à l'aperçu en direct, où le montant est transitoirement
+  // vide pendant la saisie. L'action, elle, a déjà revalidé.
   const prix = (surtitre: string, montant: string, mentions: string) => ({
     surtitre,
     montant: Number(montant) || 0,
     mentions: decouper(mentions),
   });
   return {
-    variante: f.texte.colonnes.length === 2 ? "double" : "simple",
-    theme: f.habillage.theme,
-    photo: { url: heroUrl, focale: f.habillage.focale },
-    titre: f.texte.titre,
-    bandeau: f.texte.bandeau,
-    colonnes: f.texte.colonnes.map((c) => ({
+    variante: v.colonnes.length === 2 ? "double" : "simple",
+    theme: v.theme,
+    photo: { url: heroUrl, focale: v.focale },
+    titre: v.titre,
+    bandeau: v.bandeau,
+    colonnes: v.colonnes.map((c) => ({
       entete: c.entete.trim() === "" ? null : c.entete,
       blocs: c.blocs.map((b) => ({ lignes: decouper(b.texte) })),
       prix: prix(c.surtitre, c.montant, c.mentions),
     })),
-    prix_secondaire: f.texte.prix_secondaire_actif
-      ? prix(
-          f.texte.prix_secondaire.surtitre,
-          f.texte.prix_secondaire.montant,
-          f.texte.prix_secondaire.mentions,
-        )
+    prix_secondaire: v.prix_secondaire_actif
+      ? prix(v.prix_secondaire.surtitre, v.prix_secondaire.montant, v.prix_secondaire.mentions)
       : null,
-    badge: f.texte.badge_actif
-      ? { texte: f.texte.badge.texte, icone: f.texte.badge.icone }
-      : null,
+    badge: v.badge_actif ? { texte: v.badge.texte, icone: v.badge.icone } : null,
   };
 }
 
-// Formulaire → contenus.fr (JSONB localisé, CLAUDE.md §5). La version éditée par
-// l'humain vit ici ; extraction_brute garde la sortie de l'IA, intacte.
-export function formulaireVersContenus(
-  f: FormulaireOffreT,
+// Étape 3 → part de contenus.fr qui lui appartient.
+export function visuelFormVersContenus(
+  v: VisuelFormT,
   heroUrl: string,
 ): Record<string, unknown> {
   return {
-    titre: f.texte.titre,
-    accroche: f.texte.accroche,
-    inclusions: decouper(f.faits.inclusions),
-    exclusions: decouper(f.faits.exclusions),
-    // L'étape est éditée en une ligne ; le texte détaillé de chaque étape
-    // appartient à la landing page (phase 6), il reste vide ici.
-    itineraire: decouper(f.faits.itineraire).map((titre, i) => ({
-      jour: i + 1,
-      titre,
-      texte: "",
+    titre: v.titre,
+    accroche: v.accroche,
+    faq: v.faq,
+    visuel: visuelFormVersPostVisuel(v, heroUrl),
+  };
+}
+
+// contenus.fr (version éditée par l'humain) relu comme une composition, pour que
+// l'étape 3 reparte de ce que l'opérateur a écrit et non de la sortie de l'IA.
+export function contenusVersComposition(
+  contenusFr: Record<string, unknown>,
+): CompositionT | null {
+  const v = contenusFr.visuel as Record<string, unknown> | undefined;
+  if (!v) return null;
+  const colonnes = (v.colonnes as Array<Record<string, unknown>>) ?? [];
+  return {
+    titre: (v.titre as string) ?? "",
+    bandeau: (v.bandeau as string) ?? "",
+    colonnes: colonnes.map((c) => ({
+      entete: (c.entete as string | null) ?? "",
+      blocs: ((c.blocs as Array<{ lignes: string[] }>) ?? []).map((b) => ({
+        lignes: b.lignes ?? [],
+      })),
+      prix: c.prix as { surtitre: string; montant: number; mentions: string[] },
     })),
-    faq: f.texte.faq,
-    visuel: formulaireVersVisuel(f, heroUrl),
+    prix_secondaire:
+      (v.prix_secondaire as { surtitre: string; montant: number; mentions: string[] } | null) ??
+      undefined,
+    badge: (v.badge as { texte: string; icone: string } | null) ?? undefined,
+    accroche: (contenusFr.accroche as string) ?? "",
+    faq: (contenusFr.faq as Array<{ q: string; r: string }>) ?? [],
   };
 }
 
@@ -356,7 +375,7 @@ export function formulaireVersContenus(
 export function slugifier(titre: string): string {
   const base = titre
     .normalize("NFD") // décompose « é » en « e » + accent combinant
-    .replace(/[̀-ͯ]/g, "") // diacritiques combinantes
+    .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")

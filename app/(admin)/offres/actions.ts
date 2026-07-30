@@ -67,7 +67,8 @@ export async function creerOffreDepuisFichier(
   }
 
   revalidatePath("/offres");
-  redirect(`/offres/${offreId}`);
+  // Étape suivante du flux : les faits. L'extraction s'y lance toute seule.
+  redirect(`/offres/${offreId}/faits`);
 }
 
 // ── Création d'une offre depuis une URL (snapshot HTML dans documents) ──
@@ -134,7 +135,8 @@ export async function creerOffreDepuisUrl(formData: FormData): Promise<Resultat>
   }
 
   revalidatePath("/offres");
-  redirect(`/offres/${offreId}`);
+  // Étape suivante du flux : les faits. L'extraction s'y lance toute seule.
+  redirect(`/offres/${offreId}/faits`);
 }
 
 // ── Suppression d'un brouillon (ligne + fichier source + photos) ───────

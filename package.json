@@ -12,7 +12,9 @@
     "test:schema": "tsx scripts/compter-schema.ts",
     "test:extraction": "tsx scripts/test-extraction.ts",
     "test:composition": "tsx scripts/test-composition.ts",
-    "test:formulaire": "tsx scripts/verif-formulaire.ts"
+    "test:formulaire": "tsx scripts/verif-formulaire.ts",
+    "polices": "tsx scripts/polices.ts",
+    "rendu": "tsx scripts/rendu-og.tsx"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
@@ -39,6 +41,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
+    "subset-font": "^2.5.0",
     "supabase": "^2.110.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.1",

@@ -1,12 +1,16 @@
-// Vérification à froid des fonctions pures de la phase 3 (aucun réseau, aucune
-// base) : slug, gras, et l'aller-retour formulaire → contenus.fr.
+// Vérification à froid des fonctions pures du flux de validation (aucun réseau,
+// aucune base) : slug, gras, et les aller-retours formulaire ↔ base.
 // Lance : npm run test:formulaire
 
 import {
-  FormulaireOffre,
-  formulaireVersColonnes,
-  formulaireVersContenus,
-  offreVersFormulaire,
+  FaitsForm,
+  VisuelForm,
+  faitsFormVersColonnes,
+  faitsFormVersContenus,
+  visuelFormVersContenus,
+  offreVersFaitsForm,
+  compositionVersVisuelForm,
+  contenusVersComposition,
   slugifier,
 } from "../lib/schema/formulaire";
 import { parseGras, sansGras } from "../lib/templates/social/parseGras";
@@ -35,7 +39,7 @@ verifier("gras : 3 segments", seg.length === 3, seg);
 verifier("gras : segment central en gras", seg[1]?.gras === true && seg[1]?.texte === "27 septembre 2026");
 verifier("gras : texte nettoyé", sansGras("**A** et **B**") === "A et B");
 
-// ── Aller-retour formulaire ──
+// ── Étape 2 : les faits ──
 const offre = {
   type_produit: "croisiere",
   prix_par_personne: 2599,
@@ -52,6 +56,38 @@ const extraction = {
   inclusions: ["Vols", "Hôtels"],
   itineraire: [{ lieu: "Seattle", pays: null }, { lieu: "Miami", pays: "États-Unis" }],
 };
+
+const f = offreVersFaitsForm(offre, extraction, null);
+verifier("faits : prix repris", f.prix_par_personne === "2599", f.prix_par_personne);
+verifier("faits : taxes booléen → oui", f.taxes_incluses === "oui");
+verifier("faits : aéroports alternatifs joints", f.aeroports_alternatifs === "YQB");
+verifier("faits : thème du voyage repris", f.theme_voyage === "Canal de Panama");
+verifier("faits : itinéraire lisible", f.itineraire === "Seattle\nMiami (États-Unis)", f.itineraire);
+verifier("faits : safeParse PASS", FaitsForm.safeParse(f).success);
+
+const colonnes = faitsFormVersColonnes(f);
+verifier("colonnes : prix numérique", colonnes.prix_par_personne === 2599);
+verifier("colonnes : champ vide → null", colonnes.fournisseur === null);
+verifier("colonnes : taxes → booléen", colonnes.taxes_incluses === true);
+verifier("colonnes : alternatifs → tableau", JSON.stringify(colonnes.aeroports_alternatifs) === '["YQB"]');
+
+const contenusFaits = faitsFormVersContenus(f);
+verifier(
+  "contenus (faits) : itinéraire numéroté",
+  JSON.stringify(contenusFaits.itineraire) ===
+    '[{"jour":1,"titre":"Seattle","texte":""},{"jour":2,"titre":"Miami (États-Unis)","texte":""}]',
+  contenusFaits.itineraire,
+);
+
+const sansPrix = structuredClone(f);
+sansPrix.prix_par_personne = "";
+verifier("faits : prix obligatoire", !FaitsForm.safeParse(sansPrix).success);
+
+const retourAvant = structuredClone(f);
+retourAvant.date_retour = "2026-09-01";
+verifier("faits : retour avant départ refusé", !FaitsForm.safeParse(retourAvant).success);
+
+// ── Étape 3 : le visuel ──
 const composition = {
   titre: "Croisière au Canal de Panama",
   bandeau: "21 JOURS DE SEATTLE À MIAMI",
@@ -66,56 +102,44 @@ const composition = {
   faq: [{ q: "Combien de jours ?", r: "21 jours." }],
 };
 
-const f = offreVersFormulaire(offre, extraction, composition, null);
-verifier("formulaire : prix repris", f.faits.prix_par_personne === "2599", f.faits.prix_par_personne);
-verifier("formulaire : taxes booléen → oui", f.faits.taxes_incluses === "oui");
-verifier("formulaire : aéroports alternatifs joints", f.faits.aeroports_alternatifs === "YQB");
-verifier("formulaire : thème du voyage repris", f.faits.theme_voyage === "Canal de Panama");
+const v = compositionVersVisuelForm(composition, null, "2599");
 verifier(
-  "formulaire : bloc = lignes séparées par un retour",
-  f.texte.colonnes[0].blocs[0].texte === "Vols et hôtels inclus\nUne nuit à Seattle",
-  f.texte.colonnes[0].blocs[0].texte,
+  "visuel : bloc = lignes séparées par un retour",
+  v.colonnes[0].blocs[0].texte === "Vols et hôtels inclus\nUne nuit à Seattle",
+  v.colonnes[0].blocs[0].texte,
 );
-verifier("formulaire : itinéraire lisible", f.faits.itineraire === "Seattle\nMiami (États-Unis)", f.faits.itineraire);
+verifier("visuel : thème par défaut", v.theme === "azur" && v.focale === "centre");
+verifier("visuel : safeParse PASS", VisuelForm.safeParse(v).success);
 
-const parse = FormulaireOffre.safeParse(f);
-verifier("formulaire : safeParse PASS", parse.success, parse.success ? null : parse.error.issues);
-
-const colonnes = formulaireVersColonnes(f);
-verifier("colonnes : prix numérique", colonnes.prix_par_personne === 2599);
-verifier("colonnes : champ vide → null", colonnes.fournisseur === null);
-verifier("colonnes : taxes → booléen", colonnes.taxes_incluses === true);
-verifier("colonnes : alternatifs → tableau", JSON.stringify(colonnes.aeroports_alternatifs) === '["YQB"]');
-
-const contenus = formulaireVersContenus(f, "https://exemple/hero.jpg") as Record<string, unknown>;
-const visuel = contenus.visuel as Record<string, unknown>;
-verifier("contenus : variante simple", visuel.variante === "simple");
-verifier("contenus : photo hero injectée", JSON.stringify(visuel.photo) === '{"url":"https://exemple/hero.jpg","focale":"centre"}');
-verifier("contenus : entête vide → null", (visuel.colonnes as Array<Record<string, unknown>>)[0].entete === null);
+const contenusVisuel = visuelFormVersContenus(v, "https://exemple/hero.jpg") as Record<string, unknown>;
+const visuel = contenusVisuel.visuel as Record<string, unknown>;
+verifier("contenus (visuel) : variante simple", visuel.variante === "simple");
 verifier(
-  "contenus : bloc redécoupé en 2 lignes",
+  "contenus (visuel) : photo hero injectée",
+  JSON.stringify(visuel.photo) === '{"url":"https://exemple/hero.jpg","focale":"centre"}',
+);
+verifier("contenus (visuel) : entête vide → null", (visuel.colonnes as Array<Record<string, unknown>>)[0].entete === null);
+verifier(
+  "contenus (visuel) : bloc redécoupé en 2 lignes",
   JSON.stringify(
     ((visuel.colonnes as Array<Record<string, unknown>>)[0].blocs as Array<{ lignes: string[] }>)[0].lignes,
   ) === '["Vols et hôtels inclus","Une nuit à Seattle"]',
 );
-verifier("contenus : itinéraire numéroté", JSON.stringify(contenus.itineraire) === '[{"jour":1,"titre":"Seattle","texte":""},{"jour":2,"titre":"Miami (États-Unis)","texte":""}]', contenus.itineraire);
 
-// ── Garde-fous du schéma ──
-const trop = structuredClone(f);
-trop.texte.titre = "Un titre beaucoup trop long pour le gabarit du post social";
-verifier("schéma : titre trop long refusé", !FormulaireOffre.safeParse(trop).success);
+// Aller-retour complet : contenus.fr relu comme composition doit redonner le même formulaire.
+const relu = contenusVersComposition(contenusVisuel);
+const v2 = compositionVersVisuelForm(relu, visuel as never, "2599");
+verifier("visuel : aller-retour stable (titre)", v2.titre === v.titre);
+verifier("visuel : aller-retour stable (blocs)", v2.colonnes[0].blocs[0].texte === v.colonnes[0].blocs[0].texte);
+verifier("visuel : aller-retour stable (accroche)", v2.accroche === v.accroche);
 
-const troisLignes = structuredClone(f);
-troisLignes.texte.colonnes[0].blocs[0].texte = "a\nb\nc";
-verifier("schéma : bloc de 3 lignes refusé", !FormulaireOffre.safeParse(troisLignes).success);
+const trop = structuredClone(v);
+trop.titre = "Un titre beaucoup trop long pour le gabarit du post social";
+verifier("visuel : titre trop long refusé", !VisuelForm.safeParse(trop).success);
 
-const retourAvant = structuredClone(f);
-retourAvant.faits.date_retour = "2026-09-01";
-verifier("schéma : retour avant départ refusé", !FormulaireOffre.safeParse(retourAvant).success);
-
-const sansPrix = structuredClone(f);
-sansPrix.faits.prix_par_personne = "";
-verifier("schéma : prix obligatoire", !FormulaireOffre.safeParse(sansPrix).success);
+const troisLignes = structuredClone(v);
+troisLignes.colonnes[0].blocs[0].texte = "a\nb\nc";
+verifier("visuel : bloc de 3 lignes refusé", !VisuelForm.safeParse(troisLignes).success);
 
 console.log(echecs === 0 ? "\nTout est vert." : `\n${echecs} échec(s).`);
 process.exit(echecs === 0 ? 0 : 1);
