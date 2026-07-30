@@ -10,7 +10,8 @@
     "test:securite": "tsx scripts/test-securite.ts",
     "test:rls": "tsx scripts/test-securite.ts",
     "test:schema": "tsx scripts/compter-schema.ts",
-    "test:extraction": "tsx scripts/test-extraction.ts"
+    "test:extraction": "tsx scripts/test-extraction.ts",
+    "test:composition": "tsx scripts/test-composition.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

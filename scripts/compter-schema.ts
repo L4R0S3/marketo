@@ -6,6 +6,7 @@
 
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { SortieExtraction } from "../lib/schema/offre";
+import { CompositionForme } from "../lib/composition/schema";
 
 type Noeud = {
   type?: string | string[];
@@ -16,8 +17,8 @@ type Noeud = {
   oneOf?: unknown[];
 };
 
-const unions: string[] = [];
-const facultatifs: string[] = [];
+let unions: string[] = [];
+let facultatifs: string[] = [];
 
 function parcourir(noeud: Noeud, chemin: string) {
   if (noeud.properties) {
@@ -42,12 +43,18 @@ function racine(format: unknown): Noeud {
   throw new Error("Schéma introuvable dans la sortie de zodOutputFormat : " + JSON.stringify(format).slice(0, 400));
 }
 
-const schema = racine(zodOutputFormat(SortieExtraction));
-parcourir(schema, "");
+function mesurer(titre: string, format: unknown) {
+  unions = [];
+  facultatifs = [];
+  const schema = racine(format);
+  parcourir(schema, "");
+  console.log(`=== ${titre} ===`);
+  console.log(`Paramètres à UNION       : ${unions.length} / 16  ${unions.length <= 16 ? "OK" : "DÉPASSÉ"}`);
+  if (unions.length) console.log("  " + unions.join("\n  "));
+  console.log(`Paramètres FACULTATIFS   : ${facultatifs.length} / 24  ${facultatifs.length <= 24 ? "OK" : "DÉPASSÉ"}`);
+  if (facultatifs.length) console.log("  " + facultatifs.join("\n  "));
+  console.log(`JSON Schema : ${JSON.stringify(schema).length} caractères.\n`);
+}
 
-console.log("=== Budgets des structured outputs (schéma Appel 1) ===\n");
-console.log(`Paramètres à UNION       : ${unions.length} / 16  ${unions.length <= 16 ? "OK" : "DÉPASSÉ"}`);
-if (unions.length) console.log("  " + unions.join("\n  "));
-console.log(`\nParamètres FACULTATIFS   : ${facultatifs.length} / 24  ${facultatifs.length <= 24 ? "OK" : "DÉPASSÉ"}`);
-if (facultatifs.length) console.log("  " + facultatifs.join("\n  "));
-console.log(`\nPropriétés totales décrites : ${JSON.stringify(schema).length} caractères de JSON Schema.`);
+mesurer("Appel 1 — SortieExtraction (les faits)", zodOutputFormat(SortieExtraction));
+mesurer("Appel 2 — CompositionForme (le texte)", zodOutputFormat(CompositionForme));

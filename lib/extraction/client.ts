@@ -3,7 +3,14 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { SortieExtraction, FaitsExtraction, type Faits } from "@/lib/schema/offre";
 import { PROMPT_SYSTEME_EXTRACTION } from "./prompt";
 
-const anthropic = new Anthropic(); // lit ANTHROPIC_API_KEY dans l'environnement
+// Instanciation PARESSEUSE : à l'import, l'environnement n'est pas forcément
+// chargé (les imports ES sont évalués avant le corps du module appelant, donc
+// avant process.loadEnvFile des scripts de test).
+let client: Anthropic | null = null;
+function anthropic(): Anthropic {
+  client ??= new Anthropic(); // lit ANTHROPIC_API_KEY dans l'environnement
+  return client;
+}
 
 export type SourceExtraction =
   | { kind: "image"; mediaType: "image/png" | "image/jpeg" | "image/webp"; base64: string }
@@ -40,7 +47,7 @@ export async function extraireFaits(source: SourceExtraction): Promise<ResultatE
 
   // claude-sonnet-5 : pas de temperature/top_p/top_k, pas de paramètre thinking
   // (le thinking adaptatif est actif par défaut). max_tokens couvre thinking + JSON.
-  const reponse = await anthropic.messages.parse({
+  const reponse = await anthropic().messages.parse({
     model: "claude-sonnet-5",
     max_tokens: 16000,
     system: PROMPT_SYSTEME_EXTRACTION,

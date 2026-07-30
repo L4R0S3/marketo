@@ -2,11 +2,31 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { extraireFaits, type SourceExtraction } from "@/lib/extraction/client";
 import { nettoyerSentinelles } from "@/lib/extraction/sentinelles";
+import { composerTexte, type FaitsPourComposition } from "@/lib/composition/client";
 
 export const runtime = "nodejs"; // Buffer + SDK Anthropic
 export const maxDuration = 60; // l'extraction peut prendre ~15 s
 
-// POST /api/extraction  { offreId, etape?: "extraction" }
+// Colonnes de faits relues pour l'Appel 2. On part des COLONNES, pas de
+// extraction_brute : en phase 3 l'opérateur y aura corrigé les faits, et la
+// composition doit travailler sur la version corrigée (CLAUDE.md §8).
+const COLONNES_FAITS =
+  "type_produit, fournisseur, destination_pays, destination_ville, date_depart, date_retour, " +
+  "duree_nuits, duree_jours, prix_par_personne, devise, occupation, taxes_incluses, " +
+  "prix_valide_jusqua, compagnie_aerienne, aeroport_depart, aeroports_alternatifs, " +
+  "etablissement_nom, etablissement_type, etablissement_categorie, type_cabine";
+
+// Faits qui n'ont pas de colonne dédiée : ils vivent dans extraction_brute.extraction.
+const FAITS_SANS_COLONNE = [
+  "formule_secondaire",
+  "inclusions",
+  "exclusions",
+  "itineraire",
+  "supplements",
+  "notes",
+] as const;
+
+// POST /api/extraction  { offreId, etape?: "extraction" | "composition" }
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const {
@@ -24,12 +44,21 @@ export async function POST(request: NextRequest) {
   const offreId = corps.offreId;
   const etape = corps.etape ?? "extraction";
   if (!offreId) return NextResponse.json({ error: "offreId manquant." }, { status: 400 });
-  if (etape !== "extraction")
+  if (etape !== "extraction" && etape !== "composition")
     return NextResponse.json(
-      { error: "Seule l'étape « extraction » (Appel 1) est disponible." },
+      { error: "Étape inconnue : attendu « extraction » (Appel 1) ou « composition » (Appel 2)." },
       { status: 400 },
     );
 
+  return etape === "extraction"
+    ? etapeExtraction(supabase, offreId)
+    : etapeComposition(supabase, offreId);
+}
+
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+// ── APPEL 1 — les faits ────────────────────────────────────────────────────
+async function etapeExtraction(supabase: Supabase, offreId: string) {
   const { data: offre, error } = await supabase
     .from("offres")
     .select("id, statut, source_fichier_url, extraction_brute")
@@ -136,4 +165,70 @@ export async function POST(request: NextRequest) {
     );
 
   return NextResponse.json({ faits });
+}
+
+// ── APPEL 2 — le texte ─────────────────────────────────────────────────────
+// Rejouable seul : c'est ce que fera le bouton « régénérer le texte » de la
+// phase 3. Ne touche jamais aux faits ni à extraction_brute.extraction.
+async function etapeComposition(supabase: Supabase, offreId: string) {
+  const { data: offre, error } = await supabase
+    .from("offres")
+    .select(`id, statut, extraction_brute, ${COLONNES_FAITS}`)
+    .eq("id", offreId)
+    .single<Record<string, unknown>>();
+  if (error || !offre)
+    return NextResponse.json({ error: "Offre introuvable." }, { status: 404 });
+
+  const base = (offre.extraction_brute as Record<string, unknown> | null) ?? {};
+  const extraction = (base.extraction as Record<string, unknown> | null) ?? {};
+
+  if (offre.prix_par_personne == null)
+    return NextResponse.json(
+      { error: "Faits manquants : lance d'abord l'extraction (Appel 1)." },
+      { status: 400 },
+    );
+
+  // Faits envoyés au modèle : les colonnes (corrigeables par l'opérateur) plus
+  // les listes, qui n'ont pas de colonne dédiée.
+  const faits: FaitsPourComposition = {};
+  for (const [cle, valeur] of Object.entries(offre)) {
+    if (cle === "id" || cle === "statut" || cle === "extraction_brute") continue;
+    if (valeur !== null && valeur !== undefined) faits[cle] = valeur;
+  }
+  for (const cle of FAITS_SANS_COLONNE) {
+    const valeur = extraction[cle];
+    if (valeur !== null && valeur !== undefined) faits[cle] = valeur;
+  }
+
+  let resultat;
+  try {
+    resultat = await composerTexte(faits);
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Composition échouée." },
+      { status: 422 },
+    );
+  }
+
+  if (!resultat.ok) {
+    await supabase
+      .from("offres")
+      .update({ extraction_brute: { ...base, composition: { erreur: resultat.erreur } } })
+      .eq("id", offreId);
+    return NextResponse.json({ error: resultat.erreur }, { status: 422 });
+  }
+
+  // extraction_brute.composition : sortie brute de l'Appel 2, jamais écrasée par
+  // l'Appel 1. La version éditée par l'opérateur ira dans contenus (phase 3).
+  const { error: majErr } = await supabase
+    .from("offres")
+    .update({ extraction_brute: { ...base, composition: resultat.composition } })
+    .eq("id", offreId);
+  if (majErr)
+    return NextResponse.json(
+      { error: "Enregistrement échoué : " + majErr.message },
+      { status: 500 },
+    );
+
+  return NextResponse.json({ composition: resultat.composition, relance: resultat.relance });
 }
