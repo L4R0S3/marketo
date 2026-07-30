@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Check } from "lucide-react";
 
-// Indicateur de progression du flux. L'opérateur ne voit qu'une étape à la fois ;
-// le stepper lui dit où il en est et ce qui reste. Une étape non atteignable
-// (pas de faits, pas de validation) n'est pas cliquable.
+// Indicateur de progression. L'opérateur ne voit qu'une étape à la fois ; le
+// stepper lui dit où il en est. Une étape non atteignable n'est pas cliquable.
 
 const ETAPES = [
   { cle: "depot", nom: "Dépôt", sous: null },
@@ -24,8 +24,8 @@ export function Stepper({
   estValidee: boolean;
 }) {
   const chemin = usePathname();
-  const courante = ETAPES.findIndex((e) => e.sous && chemin.endsWith(`/${e.sous}`));
-  const indexCourant = courante === -1 ? 1 : courante;
+  const trouvee = ETAPES.findIndex((e) => e.sous && chemin.endsWith(`/${e.sous}`));
+  const courante = trouvee === -1 ? 1 : trouvee;
 
   const accessible = (i: number) => {
     if (i === 0) return false; // le dépôt est passé, on n'y revient pas
@@ -35,38 +35,48 @@ export function Stepper({
   };
 
   return (
-    <ol className="flex flex-wrap items-center gap-2 text-sm">
+    <ol className="flex flex-wrap items-center gap-1">
       {ETAPES.map((e, i) => {
-        const etat =
-          i < indexCourant || (i === 0)
-            ? "faite"
-            : i === indexCourant
-              ? "courante"
-              : "a-venir";
+        const faite = i < courante;
+        const active = i === courante;
         const contenu = (
           <span
             className={
-              "flex items-center gap-2 rounded-full border px-3 py-1 " +
-              (etat === "courante"
-                ? "border-foreground bg-foreground text-background"
-                : etat === "faite"
-                  ? "border-muted-foreground/40 text-muted-foreground"
-                  : "border-dashed border-muted-foreground/30 text-muted-foreground/60")
+              "flex items-center gap-2 rounded-full py-1.5 pr-4 pl-1.5 text-sm font-medium transition-colors " +
+              (active
+                ? "bg-primary text-primary-foreground"
+                : faite
+                  ? "text-foreground hover:bg-muted"
+                  : "text-muted-foreground/60")
             }
           >
-            <span className="text-xs">{etat === "faite" ? "✓" : i + 1}</span>
+            <span
+              className={
+                "flex size-6 items-center justify-center rounded-full text-xs " +
+                (active
+                  ? "bg-primary-foreground/20"
+                  : faite
+                    ? "bg-primary/10 text-primary"
+                    : "border border-dashed")
+              }
+            >
+              {faite ? <Check className="size-3.5" /> : i + 1}
+            </span>
             {e.nom}
           </span>
         );
         return (
-          <li key={e.cle} className="flex items-center gap-2">
-            {accessible(i) && i !== indexCourant ? (
+          <li key={e.cle} className="flex items-center">
+            {accessible(i) && !active ? (
               <Link href={`/offres/${offreId}/${e.sous}`}>{contenu}</Link>
             ) : (
               contenu
             )}
             {i < ETAPES.length - 1 && (
-              <span className="text-muted-foreground/40">—</span>
+              <span
+                aria-hidden
+                className={"mx-1 h-px w-6 " + (faite ? "bg-primary/30" : "bg-border")}
+              />
             )}
           </li>
         );

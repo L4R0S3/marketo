@@ -96,9 +96,13 @@ le code d'appel API, sous peine d'erreur 400 :
 - Rôles et permissions au-delà de « connecté ou non »
 - Formulaire de réservation en ligne
 
-Le panneau d'administration doit être **fonctionnel, pas joli**. Composants shadcn
-par défaut, aucune personnalisation visuelle. Tout l'effort esthétique va dans les
-sorties générées, pas dans l'outil. Ne perds pas de temps sur l'apparence de l'admin.
+Le panneau d'administration doit être **propre, aéré, professionnel** — un outil de
+travail agréable à regarder, ni spectaculaire ni minimaliste à l'extrême. *(Révisé
+après la phase 4 : la consigne initiale était « fonctionnel, pas joli ».)* Les règles :
+**shadcn/ui uniquement**, aucun composant sur mesure, aucun CSS sur mesure, et les
+mêmes conventions partout — mêmes espacements, mêmes cartes, mêmes badges. L'effort
+esthétique va d'abord dans les sorties générées ; l'admin, lui, doit rester lisible
+et cohérent sans réclamer de travail de design.
 
 ---
 
@@ -608,8 +612,10 @@ anglais si tu préfères, peu importe.
 **Aucune sortie depuis un brouillon.** Vérifie le statut côté serveur, pas seulement
 dans l'interface.
 
-**L'admin est laid et c'est voulu.** Si tu hésites entre soigner l'apparence du
-panneau et avancer sur les gabarits de sortie, avance sur les gabarits.
+**L'admin est soigné mais standard.** shadcn/ui et Tailwind, rien d'autre : pas de
+composant maison, pas de CSS sur mesure, pas de dépendance nouvelle pour l'interface.
+Si tu hésites entre peaufiner le panneau et avancer sur les gabarits de sortie,
+avance sur les gabarits.
 
 ---
 

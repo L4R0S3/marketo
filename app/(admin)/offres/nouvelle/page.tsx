@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
+import { ArrowLeft, FileCheck2, Link2, UploadCloud } from "lucide-react";
 import {
   creerOffreDepuisFichier,
   creerOffreDepuisUrl,
@@ -9,6 +10,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 const TYPES_IMAGE = ["image/png", "image/jpeg", "image/webp"];
 const MAX_IMAGE = 10 * 1024 * 1024;
@@ -71,78 +80,124 @@ export default function NouvelleOffrePage() {
   }
 
   return (
-    <div className="flex max-w-xl flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Nouvelle offre</h1>
-        <Link href="/offres" className="text-sm text-muted-foreground underline">
-          Retour à la liste
-        </Link>
-      </div>
-
-      {/* Glisser-déposer */}
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setSurvol(true);
-        }}
-        onDragLeave={() => setSurvol(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setSurvol(false);
-          choisir(e.dataTransfer.files[0]);
-        }}
-        onClick={() => inputRef.current?.click()}
-        className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed p-10 text-center text-sm ${
-          survol ? "border-primary bg-muted" : "border-input"
-        }`}
-      >
-        <input
-          ref={inputRef}
-          type="file"
-          className="hidden"
-          accept="image/png,image/jpeg,image/webp,application/pdf"
-          onChange={(e) => choisir(e.target.files?.[0])}
-        />
-        {fichier ? (
-          <span className="font-medium">{fichier.name}</span>
-        ) : (
-          <>
-            <span>Glisse un fichier ici, ou clique pour choisir</span>
-            <span className="text-muted-foreground">
-              PNG, JPG, WEBP (10 Mo) · PDF (20 Mo)
-            </span>
-          </>
-        )}
-      </div>
-
-      <Button onClick={deposerFichier} disabled={!fichier || enCours}>
-        {enCours ? "Dépôt en cours…" : "Déposer le fichier"}
-      </Button>
-
-      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-        <span className="h-px flex-1 bg-border" /> ou <span className="h-px flex-1 bg-border" />
-      </div>
-
-      {/* URL */}
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="url">Depuis une URL (page de circuit, etc.)</Label>
-        <Input
-          id="url"
-          type="url"
-          placeholder="https://…"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-        />
-        <Button
-          variant="outline"
-          onClick={deposerUrl}
-          disabled={!url.trim() || enCours}
-        >
-          {enCours ? "Récupération…" : "Déposer l'URL"}
+        <h1 className="text-2xl font-semibold tracking-tight">Nouvelle offre</h1>
+        <Button asChild variant="ghost" size="sm">
+          <Link href="/offres">
+            <ArrowLeft className="size-4" />
+            Retour à la liste
+          </Link>
         </Button>
       </div>
 
-      {erreur && <p className="text-sm text-red-600">{erreur}</p>}
+      {erreur && (
+        <Alert variant="destructive">
+          <AlertDescription>{erreur}</AlertDescription>
+        </Alert>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Déposer un document</CardTitle>
+          <CardDescription>
+            Capture d&apos;écran Sirev, PDF fournisseur, page de circuit exportée.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setSurvol(true);
+            }}
+            onDragLeave={() => setSurvol(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setSurvol(false);
+              choisir(e.dataTransfer.files[0]);
+            }}
+            onClick={() => inputRef.current?.click()}
+            className={
+              "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed px-6 py-14 text-center transition-colors " +
+              (survol
+                ? "border-primary bg-primary/5"
+                : fichier
+                  ? "border-primary/40 bg-muted/40"
+                  : "border-input hover:border-primary/50 hover:bg-muted/50")
+            }
+          >
+            <input
+              ref={inputRef}
+              type="file"
+              className="hidden"
+              accept="image/png,image/jpeg,image/webp,application/pdf"
+              onChange={(e) => choisir(e.target.files?.[0])}
+            />
+            <div className="flex size-12 items-center justify-center rounded-full bg-muted">
+              {fichier ? (
+                <FileCheck2 className="size-6 text-primary" />
+              ) : (
+                <UploadCloud className="size-6 text-muted-foreground" />
+              )}
+            </div>
+            {fichier ? (
+              <div className="flex flex-col gap-1">
+                <span className="font-medium">{fichier.name}</span>
+                <span className="text-xs text-muted-foreground">
+                  {(fichier.size / 1024 / 1024).toFixed(1)} Mo · clique pour en choisir un autre
+                </span>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1">
+                <span className="text-sm font-medium">
+                  Glisse un fichier ici, ou clique pour choisir
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  PNG, JPG, WEBP jusqu&apos;à 10 Mo · PDF jusqu&apos;à 20 Mo
+                </span>
+              </div>
+            )}
+          </div>
+
+          <Button onClick={deposerFichier} disabled={!fichier || enCours} className="w-full">
+            {enCours ? "Dépôt en cours…" : "Déposer le fichier"}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card className="border-dashed bg-transparent shadow-none">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base font-medium">
+            <Link2 className="size-4 text-muted-foreground" />
+            Depuis une URL
+          </CardTitle>
+          <CardDescription>
+            Page de circuit en ligne : le contenu est récupéré et conservé tel quel.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="url" className="sr-only">
+              Adresse de la page
+            </Label>
+            <Input
+              id="url"
+              type="url"
+              placeholder="https://…"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+            />
+          </div>
+          <Button
+            variant="outline"
+            onClick={deposerUrl}
+            disabled={!url.trim() || enCours}
+            className="w-full"
+          >
+            {enCours ? "Récupération…" : "Déposer l'URL"}
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

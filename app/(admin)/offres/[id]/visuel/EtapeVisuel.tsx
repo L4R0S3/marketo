@@ -12,10 +12,25 @@ import {
 import { LIMITES } from "@/lib/templates/social/schema";
 import { LIMITES_TEXTE } from "@/lib/composition/schema";
 import { THEMES, NOMS_THEMES } from "@/lib/templates/social/themes";
+import { Check, ChevronDown, TriangleAlert, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Separator } from "@/components/ui/separator";
 import { PhotosSection } from "../PhotosSection";
 import { ApercuPost } from "../ApercuPost";
 import { enregistrerVisuel, validerOffre } from "../actions";
@@ -139,20 +154,24 @@ export function EtapeVisuel({
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,560px)_minmax(0,1fr)]">
       {/* Volet gauche : l'aperçu, en grand */}
-      <div className="flex flex-col gap-2 lg:sticky lg:top-4 lg:self-start">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Aperçu</h2>
-          <span className="text-xs text-muted-foreground">
-            structure — le PNG final est rendu à l&apos;étape suivante
-          </span>
-        </div>
-        <ApercuPost visuel={visuel} echelle={0.5} />
-        {!heroUrl && (
-          <p className="text-xs text-amber-600">
-            Aucune photo hero : choisis-en une ci-contre, elle est obligatoire pour valider.
-          </p>
-        )}
-      </div>
+      <Card className="lg:sticky lg:top-20 lg:self-start">
+        <CardHeader>
+          <CardTitle className="text-base">Aperçu</CardTitle>
+          <CardDescription>
+            Structure et coupures de lignes. Le PNG définitif est rendu à l&apos;étape
+            suivante.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col items-center gap-3">
+          <ApercuPost visuel={visuel} echelle={0.5} />
+          {!heroUrl && (
+            <p className="text-xs text-amber-600">
+              Aucune photo hero : choisis-en une ci-contre, elle est obligatoire pour
+              valider.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Volet droit : les contrôles.
           PhotosSection porte ses PROPRES <form> (téléversement, hero, suppression)
@@ -162,88 +181,131 @@ export function EtapeVisuel({
           Ce sont de toute façon deux actions serveur distinctes. */}
       <div className="flex flex-col gap-5">
         {composition === "encours" && (
-          <p className="rounded-md border border-dashed p-3 text-sm">
-            Composition du texte en cours — une quinzaine de secondes.
-          </p>
+          <Alert>
+            <AlertTitle>Composition du texte en cours</AlertTitle>
+            <AlertDescription>Une trentaine de secondes.</AlertDescription>
+          </Alert>
         )}
         {erreurIA && (
-          <div className="flex flex-col gap-2 rounded-md border border-destructive p-3">
-            <p className="text-sm text-destructive">{erreurIA}</p>
-            <div>
-              <Button type="button" variant="secondary" size="sm" onClick={composer}>
+          <Alert variant="destructive">
+            <TriangleAlert />
+            <AlertTitle>Composition impossible</AlertTitle>
+            <AlertDescription>
+              <span>{erreurIA}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                onClick={composer}
+              >
                 Relancer la composition
               </Button>
-            </div>
-          </div>
+            </AlertDescription>
+          </Alert>
         )}
 
         {/* Photo — son propre formulaire */}
-        <section className="flex flex-col gap-2 rounded-md border p-3">
-          <PhotosSection offreId={offreId} photos={photos} />
-        </section>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Photos</CardTitle>
+            <CardDescription>
+              La photo hero sert de fond au post et d&apos;image d&apos;en-tête de la page.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PhotosSection offreId={offreId} photos={photos} />
+          </CardContent>
+        </Card>
 
         {/* Formulaire du texte, du thème et du cadrage. onSubmit neutralisé :
             la touche Entrée dans un champ provoquerait une soumission implicite
             et un rechargement de page. */}
         <form className="flex flex-col gap-5" onSubmit={(ev) => ev.preventDefault()}>
+          {/* La barre d'action est collante en bas : sans cette réserve, elle
+              masquerait la fin du formulaire. */}
           {/* Habillage */}
-          <section className="flex flex-col gap-3 rounded-md border p-3">
-            <div className="flex flex-col gap-2">
-              <Label>Thème</Label>
-              <div className="flex flex-wrap gap-2">
-                {NOMS_THEMES.map((t) => {
-                  const actif = valeurs.theme === t.valeur;
-                  return (
-                    <button
-                      key={t.valeur}
-                      type="button"
-                      title={t.nom}
-                      onClick={() => setValue("theme", t.valeur, { shouldDirty: true })}
-                      className={
-                        "h-9 w-9 rounded-full border-2 " +
-                        (actif ? "border-foreground ring-2 ring-foreground/30" : "border-transparent")
-                      }
-                      style={{
-                        background: `linear-gradient(90deg, ${THEMES[t.valeur].gauche}, ${THEMES[t.valeur].droite})`,
-                      }}
-                    />
-                  );
-                })}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Thème et cadrage</CardTitle>
+              <CardDescription>
+                Deux choix qui t&apos;appartiennent : le modèle ne les propose pas.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-5">
+              <div className="flex flex-col gap-2">
+                <Label>Thème</Label>
+                <div className="flex flex-wrap gap-3">
+                  {NOMS_THEMES.map((t) => {
+                    const actif = valeurs.theme === t.valeur;
+                    return (
+                      <button
+                        key={t.valeur}
+                        type="button"
+                        title={t.nom}
+                        aria-label={t.nom}
+                        aria-pressed={actif}
+                        onClick={() => setValue("theme", t.valeur, { shouldDirty: true })}
+                        className={
+                          "flex size-12 items-center justify-center rounded-full transition-all " +
+                          (actif
+                            ? "ring-2 ring-foreground ring-offset-2 ring-offset-background"
+                            : "opacity-80 hover:opacity-100")
+                        }
+                        style={{
+                          background: `linear-gradient(90deg, ${THEMES[t.valeur].gauche}, ${THEMES[t.valeur].droite})`,
+                        }}
+                      >
+                        {actif && <Check className="size-5 text-white drop-shadow" />}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
 
-            <div className="flex flex-col gap-2">
-              <Label>Cadrage de la photo</Label>
-              <div className="flex gap-2">
-                {(["haut", "centre", "bas"] as const).map((f) => (
-                  <Button
-                    key={f}
-                    type="button"
-                    size="sm"
-                    variant={valeurs.focale === f ? "default" : "outline"}
-                    onClick={() => setValue("focale", f, { shouldDirty: true })}
-                  >
-                    {f}
-                  </Button>
-                ))}
+              <Separator />
+
+              <div className="flex flex-col gap-2">
+                <Label>Cadrage de la photo</Label>
+                <div className="flex gap-2">
+                  {(["haut", "centre", "bas"] as const).map((f) => (
+                    <Button
+                      key={f}
+                      type="button"
+                      size="sm"
+                      variant={valeurs.focale === f ? "default" : "outline"}
+                      onClick={() => setValue("focale", f, { shouldDirty: true })}
+                    >
+                      {f}
+                    </Button>
+                  ))}
+                </div>
               </div>
-            </div>
-          </section>
+            </CardContent>
+          </Card>
 
           {/* Texte du visuel */}
-          <section className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold">Texte du post</h2>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                disabled={composition === "encours"}
-                onClick={composer}
-              >
-                {composition === "encours" ? "Composition…" : "Régénérer le texte"}
-              </Button>
-            </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Texte du post</CardTitle>
+              <CardDescription>
+                Composé à partir des faits validés. Les compteurs indiquent la place
+                disponible dans le gabarit.
+              </CardDescription>
+              <div className="col-start-2 row-span-2 row-start-1 self-start justify-self-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={composition === "encours"}
+                  onClick={composer}
+                >
+                  <Wand2 className="size-4" />
+                  {composition === "encours" ? "Composition…" : "Régénérer"}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
 
             <div className="flex flex-col gap-1">
               <div className="flex items-center justify-between">
@@ -346,14 +408,23 @@ export function EtapeVisuel({
                 </div>
               )}
             </div>
-          </section>
+            </CardContent>
+          </Card>
 
           {/* Texte de publication et FAQ : utiles à l'étape suivante et à la landing page */}
-          <details className="rounded-md border p-3">
-            <summary className="cursor-pointer text-sm font-semibold">
-              Texte de publication et FAQ
-            </summary>
-            <div className="mt-3 flex flex-col gap-3">
+          <Collapsible className="mb-4">
+            <Card>
+              <CollapsibleTrigger asChild>
+                <CardHeader className="group cursor-pointer">
+                  <CardTitle className="text-base">Texte de publication et FAQ</CardTitle>
+                  <CardDescription>
+                    L&apos;accroche du post et les questions de la page de destination.
+                  </CardDescription>
+                  <ChevronDown className="col-start-2 row-span-2 row-start-1 size-4 self-center justify-self-end text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="flex flex-col gap-3">
               <div className="flex flex-col gap-1">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="accroche">Accroche (texte du post)</Label>
@@ -384,14 +455,18 @@ export function EtapeVisuel({
                   Ajouter une question
                 </Button>
               </div>
-            </div>
-          </details>
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
 
           {/* Barre d'action */}
-          <div className="sticky bottom-0 flex flex-col gap-2 border-t bg-background py-3">
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="sticky bottom-0 flex flex-col gap-2 border-t bg-background/95 py-4 backdrop-blur">
+            <div className="flex gap-2">
               <Button
                 type="button"
+                size="lg"
+                className="flex-1"
                 disabled={enCours}
                 onClick={soumettre(validerOffre, () => router.push(`/offres/${offreId}/sorties`))}
               >
@@ -399,16 +474,19 @@ export function EtapeVisuel({
               </Button>
               <Button
                 type="button"
+                size="lg"
                 variant="outline"
                 disabled={enCours}
                 onClick={soumettre(enregistrerVisuel)}
               >
-                Enregistrer sans valider
+                Enregistrer
               </Button>
-              {statut !== "brouillon" && (
-                <span className="text-xs text-muted-foreground">Offre déjà {statut}.</span>
-              )}
             </div>
+            {statut !== "brouillon" && (
+              <span className="text-center text-xs text-muted-foreground">
+                Offre déjà {statut}.
+              </span>
+            )}
             {message && <p className="text-sm text-destructive">{message}</p>}
           </div>
         </form>

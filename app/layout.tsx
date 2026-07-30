@@ -12,6 +12,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Le favicon vient de app/icon.svg (convention Next), rien à déclarer ici.
 export const metadata: Metadata = {
   title: "Machine Marketing — Aéroport Voyage",
   description: "Outil interne de génération de matériel marketing",

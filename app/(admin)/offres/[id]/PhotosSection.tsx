@@ -28,9 +28,8 @@ export function PhotosSection({
   );
 
   return (
+    // Pas de titre ici : la carte qui accueille cette section en porte un.
     <section className="flex flex-col gap-3">
-      <h2 className="text-sm font-semibold">Photos</h2>
-
       <form action={action} className="flex flex-col gap-2">
         <input type="hidden" name="offreId" value={offreId} />
         <input
