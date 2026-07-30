@@ -30,7 +30,9 @@ MARQUE
 
 PRIX
 - Ne jamais inventer ni arrondir. prix_par_personne est le SEUL champ sans valeur d'absence possible : une offre sans prix n'est pas vendable. Si le prix principal est illisible, l'offre n'est pas exploitable → statut = "erreur". Tous les autres champs, dates comprises, ont une valeur d'absence.
-- Distinguer prix AFFICHÉ / TAXES INCLUSES : taxes_incluses = true/false ; omets ce champ si le document ne le précise pas.
+- Si le document affiche un prix de base ET des taxes séparément, extrais les trois : prix_par_personne = le total taxes incluses, prix_base = le prix avant taxes, taxes = le montant des taxes. Si le document n'affiche qu'un seul prix, c'est prix_par_personne ; prix_base et taxes restent omis.
+- Les trois montants sont PAR PERSONNE. Un total pour deux voyageurs (ex. colonne « Grtot » de Sirev) ne va dans aucun de ces champs.
+- taxes_incluses = ce que dit le document (true/false) ; omets ce champ s'il ne le précise pas. C'est une trace de la source, pas une consigne d'affichage.
 
 DEVISE
 - Un « $ » sans précision, dans un contexte québécois, signifie CAD. N'extraire USD que si explicitement marqué « US$ », « USD » ou « en dollars américains ». devise = "" si aucun symbole monétaire n'est présent.

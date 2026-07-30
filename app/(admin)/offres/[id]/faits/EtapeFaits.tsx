@@ -22,10 +22,18 @@ type Champ = {
   type?: "texte" | "liste" | "select";
   options?: { valeur: string; nom: string }[];
   aide?: string;
+  // Suggestion affichée en filigrane. Depuis la migration 0005, la base ne pose
+  // plus de défaut 'YUL'/'CAD' : un champ vide veut dire « le document ne le dit
+  // pas ». On le suggère, on ne le pré-remplit pas.
+  placeholder?: string;
 };
 
 const CRITIQUES: Champ[] = [
-  { cle: "prix_par_personne", label: "Prix par personne", aide: "sans symbole, ex. 2599" },
+  {
+    cle: "prix_par_personne",
+    label: "Prix par personne",
+    aide: "TOTAL taxes incluses — c'est le seul montant affiché sur le post",
+  },
   { cle: "date_depart", label: "Date de départ", aide: "AAAA-MM-JJ, vide si départs multiples" },
   {
     cle: "occupation",
@@ -42,6 +50,8 @@ const CRITIQUES: Champ[] = [
 ];
 
 const AUTRES: Champ[] = [
+  { cle: "prix_base", label: "Prix avant taxes", aide: "détail du document, jamais affiché" },
+  { cle: "taxes", label: "Taxes", aide: "détail du document, jamais affiché" },
   { cle: "theme_voyage", label: "Thème du voyage" },
   {
     cle: "type_produit",
@@ -54,7 +64,7 @@ const AUTRES: Champ[] = [
       { valeur: "circuit", nom: "circuit" },
     ],
   },
-  { cle: "devise", label: "Devise" },
+  { cle: "devise", label: "Devise", placeholder: "CAD ?" },
   {
     cle: "taxes_incluses",
     label: "Taxes incluses",
@@ -73,7 +83,12 @@ const AUTRES: Champ[] = [
   { cle: "destination_pays", label: "Destination (pays)" },
   { cle: "destination_ville", label: "Destination (ville)" },
   { cle: "compagnie_aerienne", label: "Compagnie aérienne" },
-  { cle: "aeroport_depart", label: "Aéroport de départ" },
+  {
+    cle: "aeroport_depart",
+    label: "Aéroport de départ",
+    placeholder: "YUL — Montréal ?",
+    aide: "vide = le document ne le mentionne pas ; ne le devine pas",
+  },
   { cle: "aeroports_alternatifs", label: "Aéroports alternatifs", aide: "séparés par des virgules" },
   { cle: "etablissement_nom", label: "Établissement" },
   {
@@ -201,6 +216,7 @@ export function EtapeFaits({
         ) : (
           <Input
             id={c.cle}
+            placeholder={c.placeholder}
             className={gros ? "h-12 text-lg font-semibold" : undefined}
             {...register(c.cle)}
           />

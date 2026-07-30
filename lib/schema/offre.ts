@@ -58,8 +58,14 @@ const Formule = z.object({
   date_retour: DateISOouVide,
   duree_nuits: z.number().int().positive().optional(), // omis si absent (0 ambigu)
   duree_jours: z.number().int().positive().optional(),
+  // prix_par_personne est TOUJOURS le total taxes incluses : c'est le seul prix
+  // que le visuel affiche. Quand le document sépare base et taxes (Sirev :
+  // Prix / Taxes / Total), les trois sont extraits — prix_base et taxes ne
+  // servent qu'à la fiche, pour que l'opérateur retrouve le détail du document.
   prix_par_personne: z.number().positive(), // toujours présent, jamais de sentinelle
-  taxes_incluses: z.boolean().optional(), // omis si le document ne précise pas
+  prix_base: z.number().positive().optional(), // prix avant taxes, omis si absent
+  taxes: z.number().positive().optional(), // montant des taxes, omis si absent
+  taxes_incluses: z.boolean().optional(), // ce que dit le document, pour la traçabilité
 });
 
 // Complément optionnel structuré (plan boissons, wifi, crédit excursion).

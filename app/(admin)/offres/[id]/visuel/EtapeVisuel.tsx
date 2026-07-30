@@ -195,7 +195,7 @@ export function EtapeVisuel({
                       (actif ? "border-foreground ring-2 ring-foreground/30" : "border-transparent")
                     }
                     style={{
-                      background: `linear-gradient(135deg, ${THEMES[t.valeur].cadreDe}, ${THEMES[t.valeur].cadreVers})`,
+                      background: `linear-gradient(90deg, ${THEMES[t.valeur].gauche}, ${THEMES[t.valeur].droite})`,
                     }}
                   />
                 );

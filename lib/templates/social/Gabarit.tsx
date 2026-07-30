@@ -178,11 +178,12 @@ export function Gabarit({ visuel }: { visuel: PostVisuelT }) {
         height: HAUTEUR,
         display: "flex",
         padding: 14,
-        background: `linear-gradient(135deg, ${theme.cadreDe}, ${theme.cadreVers})`,
+        background: `linear-gradient(90deg, ${theme.gauche}, ${theme.droite})`,
       }}
     >
       <div
         style={{
+          position: "relative",
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
@@ -198,8 +199,25 @@ export function Gabarit({ visuel }: { visuel: PostVisuelT }) {
             : {}),
         }}
       >
+        {/* Voile : sans lui, un titre blanc sur photo claire devient illisible.
+            Opaque à 60 % en haut, transparent au tiers de la hauteur. Posé avant
+            le contenu, donc dessous — Satori empile dans l'ordre du DOM. */}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 620,
+            display: "flex",
+            background: "linear-gradient(180deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0) 100%)",
+          }}
+        />
+
         {/* Haut : titre, bandeau, blocs */}
         <div style={{ display: "flex", flexDirection: "column" }}>
+          {/* Anton n'a pas d'italique et Satori n'en synthétise pas : l'inclinaison
+              du gabarit d'origine est obtenue par une déformation. */}
           <span
             style={{
               fontFamily: "Anton",
@@ -208,6 +226,7 @@ export function Gabarit({ visuel }: { visuel: PostVisuelT }) {
               color: BLANC,
               textShadow: "0 8px 22px rgba(0,0,0,.55)",
               marginBottom: 16,
+              transform: "skewX(-12deg)",
             }}
           >
             {visuel.titre}
@@ -229,7 +248,7 @@ export function Gabarit({ visuel }: { visuel: PostVisuelT }) {
               style={{
                 fontFamily: "Anton",
                 fontSize: 38,
-                color: theme.accent,
+                color: theme.droite,
                 marginRight: 14,
               }}
             >
@@ -307,7 +326,7 @@ export function Gabarit({ visuel }: { visuel: PostVisuelT }) {
                   style={{
                     fontFamily: "Anton",
                     fontSize: 34,
-                    color: theme.accent,
+                    color: theme.droite,
                     marginRight: 12,
                   }}
                 >

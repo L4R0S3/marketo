@@ -89,7 +89,7 @@ export function ApercuPost({
           height: H,
           transform: `scale(${echelle})`,
           transformOrigin: "top left",
-          background: `linear-gradient(135deg, ${theme.cadreDe}, ${theme.cadreVers})`,
+          background: `linear-gradient(90deg, ${theme.gauche}, ${theme.droite})`,
           padding: 12,
           display: "flex",
         }}
@@ -113,8 +113,21 @@ export function ApercuPost({
                   : "center",
           }}
         >
+          {/* Voile : même rôle que dans le gabarit Satori — un titre blanc doit
+              rester lisible sur une photo claire. */}
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 620,
+              background: "linear-gradient(180deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0) 100%)",
+            }}
+          />
+
           {/* Titre + bandeau */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 14 }}>
             <span
               style={{
                 color: "white",
@@ -123,6 +136,8 @@ export function ApercuPost({
                 fontStyle: "italic",
                 lineHeight: 1,
                 textShadow: "0 6px 16px rgba(0,0,0,.6)",
+                transform: "skewX(-12deg)",
+                transformOrigin: "left bottom",
               }}
             >
               {visuel.titre || "Titre du post"}
@@ -131,7 +146,7 @@ export function ApercuPost({
               style={{
                 display: "inline-block",
                 background: "white",
-                color: theme.accent,
+                color: theme.droite,
                 fontWeight: 800,
                 fontSize: 34,
                 padding: "10px 18px",
@@ -166,7 +181,14 @@ export function ApercuPost({
           </div>
 
           {/* Bas : prix, prix secondaire, badge, signature */}
-          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
+          <div
+            style={{
+              position: "relative",
+              display: "flex",
+              alignItems: "flex-end",
+              justifyContent: "space-between",
+            }}
+          >
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
               {visuel.colonnes.length === 1 && <BlocPrix prix={visuel.colonnes[0].prix} />}
               {visuel.prix_secondaire && <BlocPrix prix={visuel.prix_secondaire} compact />}

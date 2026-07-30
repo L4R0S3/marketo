@@ -19,6 +19,10 @@ const entierOuVide = z
   .string()
   .regex(/^\d*$/, "nombre entier attendu")
   .refine((v) => v === "" || Number(v) > 0, "doit être supérieur à 0");
+const montantOuVide = z
+  .string()
+  .regex(/^(\d+([.,]\d{1,2})?)?$/, "montant attendu, ex. 2249 ou 2249,50")
+  .refine((v) => v === "" || Number(v.replace(",", ".")) > 0, "doit être supérieur à 0");
 
 // ── Étape 2 : les faits ────────────────────────────────────────────────────
 export const FaitsForm = z
@@ -37,6 +41,10 @@ export const FaitsForm = z
       .min(1, "le prix est obligatoire")
       .regex(/^\d+([.,]\d{1,2})?$/, "montant attendu, ex. 2599 ou 2599,50")
       .refine((v) => Number(v.replace(",", ".")) > 0, "doit être supérieur à 0"),
+    // Détail du prix, tel que le document le sépare. N'apparaît sur aucune sortie :
+    // le visuel n'affiche que prix_par_personne, toujours taxes incluses.
+    prix_base: montantOuVide,
+    taxes: montantOuVide,
     devise: z.string(),
     occupation: z.enum(["", "simple", "double", "triple", "quadruple"]),
     taxes_incluses: z.enum(["", "oui", "non"]),
@@ -191,6 +199,8 @@ export function offreVersFaitsForm(
     duree_nuits: nombre(offre.duree_nuits),
     duree_jours: nombre(offre.duree_jours),
     prix_par_personne: nombre(offre.prix_par_personne),
+    prix_base: nombre(offre.prix_base),
+    taxes: nombre(offre.taxes),
     devise: chaine(offre.devise),
     occupation: (chaine(offre.occupation) || "") as FaitsFormT["occupation"],
     taxes_incluses: offre.taxes_incluses == null ? "" : offre.taxes_incluses ? "oui" : "non",
@@ -261,6 +271,7 @@ export function compositionVersVisuelForm(
 export function faitsFormVersColonnes(d: FaitsFormT): Record<string, unknown> {
   const vide = (s: string) => (s.trim() === "" ? null : s.trim());
   const entier = (s: string) => (s.trim() === "" ? null : Number(s));
+  const montant = (s: string) => (s.trim() === "" ? null : Number(s.replace(",", ".")));
   const alternatifs = d.aeroports_alternatifs
     .split(",")
     .map((s) => s.trim())
@@ -276,6 +287,8 @@ export function faitsFormVersColonnes(d: FaitsFormT): Record<string, unknown> {
     duree_nuits: entier(d.duree_nuits),
     duree_jours: entier(d.duree_jours),
     prix_par_personne: Number(d.prix_par_personne.replace(",", ".")),
+    prix_base: montant(d.prix_base),
+    taxes: montant(d.taxes),
     devise: vide(d.devise),
     occupation: vide(d.occupation),
     taxes_incluses: d.taxes_incluses === "" ? null : d.taxes_incluses === "oui",

@@ -10,6 +10,8 @@ export const maxDuration = 60; // l'extraction peut prendre ~15 s
 // Colonnes de faits relues pour l'Appel 2. On part des COLONNES, pas de
 // extraction_brute : en phase 3 l'opérateur y aura corrigé les faits, et la
 // composition doit travailler sur la version corrigée (CLAUDE.md §8).
+// prix_base et taxes n'y figurent PAS : le visuel n'affiche que
+// prix_par_personne (total taxes incluses). Le détail reste à la fiche.
 const COLONNES_FAITS =
   "type_produit, fournisseur, destination_pays, destination_ville, date_depart, date_retour, " +
   "duree_nuits, duree_jours, prix_par_personne, devise, occupation, taxes_incluses, " +
@@ -128,9 +130,10 @@ async function etapeExtraction(supabase: Supabase, offreId: string) {
 
   // Après conversion, un fait absent vaut null (chaînes, listes) ou undefined
   // (nombres et booléens, simplement omis). Le `?? null` uniformise pour ne pas
-  // laisser de valeur périmée sur une ré-extraction. Exceptions devise /
-  // aeroport_depart : undefined = champ non envoyé dans l'UPDATE, ce qui PRÉSERVE
-  // les défauts DB 'CAD' / 'YUL'.
+  // laisser de valeur périmée sur une ré-extraction.
+  // devise et aeroport_depart suivent la même règle depuis la migration 0005 :
+  // leurs défauts DB ('CAD', 'YUL') ont été retirés, car ils remplissaient le
+  // trou en silence et la composition les reprenait ensuite comme des faits.
   const maj: Record<string, unknown> = {
     type_produit: faits.type_produit ?? null,
     fournisseur: faits.fournisseur ?? null,
@@ -141,6 +144,8 @@ async function etapeExtraction(supabase: Supabase, offreId: string) {
     duree_nuits: faits.duree_nuits ?? null,
     duree_jours: faits.duree_jours ?? null,
     prix_par_personne: faits.prix_par_personne,
+    prix_base: faits.prix_base ?? null,
+    taxes: faits.taxes ?? null,
     occupation: faits.occupation ?? null,
     taxes_incluses: faits.taxes_incluses ?? null,
     prix_valide_jusqua: faits.prix_valide_jusqua ?? null,
@@ -153,8 +158,8 @@ async function etapeExtraction(supabase: Supabase, offreId: string) {
     lien_reservation: faits.lien_reservation ?? null,
     lien_tripadvisor: faits.lien_tripadvisor ?? null,
     lien_monarc: faits.lien_monarc ?? null,
-    devise: faits.devise ?? undefined,
-    aeroport_depart: faits.aeroport_depart ?? undefined,
+    devise: faits.devise ?? null,
+    aeroport_depart: faits.aeroport_depart ?? null,
     extraction_brute: extractionBrute,
   };
 

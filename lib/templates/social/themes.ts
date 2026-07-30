@@ -1,26 +1,27 @@
 import type { ThemeT } from "./schema";
 
-// ⚠️ VALEURS PROVISOIRES — CLAUDE.md §12 liste « les valeurs hexadécimales exactes
-// des six thèmes » parmi les points à clarifier AVANT la phase 4. Celles-ci sont
-// des approximations relevées à l'œil sur les posts existants, uniquement pour que
-// l'aperçu du formulaire de validation ne soit pas gris. Elles ne doivent pas être
-// reprises telles quelles dans le rendu final : remplace-les par les valeurs de
-// marque, puis régénère les six SVG de signature (/public/signature/).
+// Les six thèmes de couleur, relevés à la pipette sur les posts Canva existants
+// (bordures des quatre captures de fixtures/posts/, points contaminés par la photo
+// écartés). Olive et prune n'apparaissaient dans aucune capture : leurs valeurs
+// sont dérivées sur la même recette — teinte claire et saturée à gauche, la même
+// assombrie à droite.
+//
+// Le dégradé du cadre est HORIZONTAL (gauche → droite), pas diagonal : c'est ce
+// que font les originaux.
 
 export type Theme = {
   nom: string;
-  cadreDe: string; // départ du dégradé de bordure
-  cadreVers: string; // arrivée du dégradé
-  accent: string; // teinte du bandeau et des accents
+  gauche: string; // départ du dégradé de bordure
+  droite: string; // arrivée — sert aussi d'accent (flèche du bandeau, icône du badge)
 };
 
 export const THEMES: Record<ThemeT, Theme> = {
-  framboise: { nom: "Framboise", cadreDe: "#c2185b", cadreVers: "#7b1fa2", accent: "#ad1457" },
-  sarcelle: { nom: "Sarcelle", cadreDe: "#00838f", cadreVers: "#26a69a", accent: "#00695c" },
-  azur: { nom: "Azur", cadreDe: "#0277bd", cadreVers: "#26c6da", accent: "#01579b" },
-  ambre: { nom: "Ambre", cadreDe: "#ef6c00", cadreVers: "#ffb300", accent: "#e65100" },
-  olive: { nom: "Olive", cadreDe: "#558b2f", cadreVers: "#9ccc65", accent: "#33691e" },
-  prune: { nom: "Prune", cadreDe: "#6a1b9a", cadreVers: "#ab47bc", accent: "#4a148c" },
+  framboise: { nom: "Framboise", gauche: "#ED3A53", droite: "#852352" },
+  sarcelle: { nom: "Sarcelle", gauche: "#89C4BE", droite: "#3A575A" },
+  azur: { nom: "Azur", gauche: "#4EC167", droite: "#1A61A8" },
+  ambre: { nom: "Ambre", gauche: "#F7953F", droite: "#A4400F" },
+  olive: { nom: "Olive", gauche: "#8BC34A", droite: "#33691E" },
+  prune: { nom: "Prune", gauche: "#CE93D8", droite: "#6A1B9A" },
 };
 
 export const NOMS_THEMES = Object.entries(THEMES).map(([cle, t]) => ({

@@ -99,6 +99,33 @@ const solo: PostVisuelT = {
   badge: { texte: "Départs de Québec possibles!", icone: "yqb" },
 };
 
+// Offre Sirev réelle (Emotions By Hodelpa Juan Dolio) : texte produit par l'Appel 2
+// lors du parcours de bout en bout. Photo claire, pour juger le voile.
+const sirev: PostVisuelT = {
+  variante: "simple",
+  theme: "sarcelle",
+  photo: { url: photo, focale: "centre" },
+  titre: "Tout inclus à Santo Domingo",
+  bandeau: "7 nuits tout inclus, hôtel 4 étoiles, Santo Domingo",
+  colonnes: [
+    {
+      entete: null,
+      blocs: [
+        { lignes: ["**Hôtel 4 étoiles**", "Emotions By Hodelpa Juan Dolio"] },
+        { lignes: ["7 nuits / 8 jours à Santo Domingo"] },
+        { lignes: ["Forfait tout inclus"] },
+      ],
+      prix: {
+        surtitre: "À partir de seulement",
+        montant: 2839,
+        mentions: ["/personne,", "occ. double,", "taxes incluses."],
+      },
+    },
+  ],
+  prix_secondaire: null,
+  badge: null,
+};
+
 async function rendre(nom: string, visuel: PostVisuelT) {
   const reponse = new ImageResponse(<Gabarit visuel={visuel} />, {
     width: LARGEUR,
@@ -113,6 +140,7 @@ async function rendre(nom: string, visuel: PostVisuelT) {
 
 async function main() {
   mkdirSync(DOSSIER, { recursive: true });
+  await rendre("sirev-santo-domingo", sirev);
   await rendre("panama-simple", panama);
   await rendre("solo-double", solo);
   console.log("\nOuvre les fichiers de rendus/ pour comparer avec les originaux.");
