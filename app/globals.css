@@ -132,3 +132,31 @@
     @apply font-sans;
   }
 }
+
+/* Polices du gabarit social. Ce sont EXACTEMENT les fichiers sous-ensemblés que
+   Satori utilise pour produire le PNG (voir scripts/polices.ts). L'aperçu de
+   l'étape Visuel s'en sert : sans elles, il rendait le titre en Geist, une
+   police bien plus large qu'Anton, et le titre passait à la ligne en débordant
+   sous le bandeau du cadre alors que le PNG tenait sur une ligne.
+   Ces polices ne servent qu'à l'aperçu : l'interface reste en Geist. */
+@font-face {
+  font-family: "Anton";
+  src: url("/fonts/anton-regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Raleway";
+  src: url("/fonts/raleway-400.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Raleway";
+  src: url("/fonts/raleway-700.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}

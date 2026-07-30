@@ -5,13 +5,12 @@ import { GEOMETRIE, THEMES } from "@/lib/templates/social/themes";
 import type { PostVisuelT } from "@/lib/templates/social/schema";
 
 // Aperçu en direct du post social, au format réel 1080 × 1350 puis réduit.
-// Mêmes trois couches que le rendu Satori — photo, frame PNG, texte — et les
-// mêmes limites de placement, pour que ce qu'on voit ici corresponde au PNG
-// produit à l'étape suivante. Le frame est servi depuis /public/frames.
-//
-// Reste une approximation : les polices du navigateur ne sont pas Anton et
-// Raleway sous-ensemblées, donc les coupures de lignes peuvent différer de
-// quelques caractères.
+// Mêmes trois couches que le rendu Satori — photo, frame PNG, texte — les mêmes
+// limites de placement ET LES MÊMES POLICES : Anton et Raleway sous-ensemblées
+// sont déclarées en @font-face dans globals.css, à partir des fichiers que
+// Satori lit pour produire le PNG. C'est ce qui rend les coupures de lignes
+// fidèles ; avec la police de l'interface, bien plus large, le titre passait à
+// la ligne ici alors qu'il tenait sur une ligne dans le PNG.
 
 const L = GEOMETRIE.largeur;
 const H = GEOMETRIE.hauteur;
@@ -21,9 +20,13 @@ const MARGE_DROITE = 40;
 const BLANC = "#ffffff";
 const ENCRE = "#141414";
 
-// Même règle que le gabarit Satori : le titre remplit la largeur du bandeau.
+// Mêmes règles de dimensionnement que le gabarit Satori.
+const tailleQuiTient = (texte: string, largeur: number, avance: number, max: number) =>
+  Math.max(18, Math.min(max, Math.floor(largeur / (avance * Math.max(texte.length, 1)))));
+
 const tailleDuTitre = (titre: string) =>
-  Math.max(18, Math.min(150, Math.floor((L - TITRE_X - MARGE_DROITE) / (0.425 * Math.max(titre.length, 1)))));
+  tailleQuiTient(titre, L - TITRE_X - MARGE_DROITE, 0.425, 150);
+const tailleBandeau = (bandeau: string) => tailleQuiTient(bandeau, 880, 0.56, 34);
 
 function Ligne({ texte, taille }: { texte: string; taille: number }) {
   return (
@@ -36,13 +39,14 @@ function Ligne({ texte, taille }: { texte: string; taille: number }) {
         padding: "8px 18px",
         marginBottom: 8,
         color: ENCRE,
+        fontFamily: "Raleway, sans-serif",
         fontSize: taille,
         lineHeight: 1.25,
         whiteSpace: "pre",
       }}
     >
       {parseGras(texte).map((s, i) => (
-        <span key={i} style={{ fontWeight: s.gras ? 800 : 400 }}>
+        <span key={i} style={{ fontWeight: s.gras ? 700 : 400 }}>
           {s.texte}
         </span>
       ))}
@@ -61,14 +65,21 @@ function BlocPrix({
 }) {
   if (!prix) return null;
   return (
-    <div style={{ display: "flex", flexDirection: "column", color: BLANC }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        color: BLANC,
+        fontFamily: "Raleway, sans-serif",
+      }}
+    >
       <span style={{ fontSize: compact ? 26 : 30, textShadow: "0 3px 10px rgba(0,0,0,.65)" }}>
         {prix.surtitre}
       </span>
       <span
         style={{
+          fontFamily: "Anton, sans-serif",
           fontSize: compact ? 82 : 140,
-          fontWeight: 900,
           lineHeight: 1,
           transform: "skewX(-12deg)",
           textShadow: "0 6px 18px rgba(0,0,0,.6)",
@@ -148,11 +159,15 @@ export function ApercuPost({
             }}
           >
             <span
+              data-apercu-titre
               style={{
+                fontFamily: "Anton, sans-serif",
                 color: BLANC,
                 fontSize: tailleDuTitre(visuel.titre || "Titre du post"),
-                fontWeight: 900,
                 lineHeight: 1.05,
+                // Le titre du gabarit tient sur UNE ligne, par construction :
+                // on l'empêche de passer à la ligne même si la police tarde.
+                whiteSpace: "nowrap",
                 transform: "skewX(-12deg)",
                 textShadow: "0 6px 18px rgba(0,0,0,.45)",
               }}
@@ -183,11 +198,15 @@ export function ApercuPost({
                 borderRadius: 12,
                 padding: "12px 22px",
                 marginBottom: 22,
-                fontWeight: 800,
-                fontSize: 34,
+                fontFamily: "Raleway, sans-serif",
+                fontWeight: 700,
+                fontSize: tailleBandeau(visuel.bandeau),
+                whiteSpace: "nowrap",
               }}
             >
-              <span style={{ marginRight: 14 }}>→</span>
+              <span style={{ fontFamily: "Anton, sans-serif", fontSize: 38, marginRight: 14 }}>
+                →
+              </span>
               {visuel.bandeau.toUpperCase()}
             </span>
 
@@ -252,11 +271,13 @@ export function ApercuPost({
                 color: ENCRE,
                 borderRadius: 20,
                 padding: "12px 22px",
+                fontFamily: "Raleway, sans-serif",
                 fontWeight: 700,
                 fontSize: 24,
+                whiteSpace: "nowrap",
               }}
             >
-              <span style={{ fontWeight: 900, fontSize: 34, marginRight: 12 }}>
+              <span style={{ fontFamily: "Anton, sans-serif", fontSize: 34, marginRight: 12 }}>
                 {visuel.badge.icone.toUpperCase()}
               </span>
               {visuel.badge.texte}
