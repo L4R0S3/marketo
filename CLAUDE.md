@@ -430,6 +430,45 @@ donc la **forme** (champs, types, enums, `required`), et Zod garantit le reste.
 - **Aucune relance automatique.** Si ça échoue, on affiche l'erreur à l'opérateur — on
   ne rejoue jamais une extraction de faits à l'aveugle.
 
+#### Stratégie « sentinelles » — contrainte structurelle des structured outputs
+
+Mesuré en conditions réelles : les structured outputs imposent **deux plafonds**, et les
+objets **imbriqués comptent** dans les deux.
+
+| Budget | Plafond | Ce qui le consomme |
+|---|---|---|
+| Paramètres à union | 16 | `.nullable()` → `anyOf: [type, null]` |
+| Paramètres facultatifs | 24 | `.optional()` → champ retiré de `required` |
+
+Le schéma des faits en comptait ~40 : aucune extraction ne partait (400). Règle retenue,
+**unique et sans exception** : presque tout est **requis**, et « absent » s'exprime par une
+**sentinelle**.
+
+| Type | Encodage | Absence |
+|---|---|---|
+| Chaîne (enums compris) | `z.string()` | `""` |
+| Liste | `z.array(...)` | `[]` |
+| Nombre | `.optional()` | champ omis (`0` serait ambigu) |
+| Booléen | `.optional()` | champ omis |
+| Objet (`formule_secondaire`, `faits`) | `.optional()` | champ omis |
+
+Coût final : **0 union et 10 facultatifs** — vérifiable à tout moment par
+`npm run test:schema`, qui compte les deux budgets sur le JSON Schema réellement généré.
+Relance-le après **toute** modification de `lib/schema/offre.ts`.
+
+`prix_par_personne` est le **seul** champ sans valeur d'absence : une offre sans prix
+n'est pas vendable, donc prix illisible → `statut = "erreur"`. **`date_depart` a une
+sentinelle** : les posts à départs multiples sont courants et restent exploitables ; la
+date est alors saisie à l'écran de validation (phase 3).
+
+La conversion `"" → null` et `[] → null` se fait dans `lib/extraction/sentinelles.ts`
+(`nettoyerSentinelles()`), appelée par la route **après** un parse réussi et **avant**
+toute écriture. Validation et transformation restent séparées : le schéma valide, la
+fonction transforme. La base ne voit jamais de sentinelle.
+
+Note : `zodOutputFormat` (SDK 0.115 + zod v4) n'émet pas les `enum` en contrainte réelle
+(ils partent en `description`) — les valeurs d'enum sont donc validées côté client par Zod.
+
 ### Appel 2 — Composition (le texte marketing)
 
 - **Entrée** : les faits validés de l'appel 1, en JSON.
@@ -460,7 +499,9 @@ donc la **forme** (champs, types, enums, `required`), et Zod garantit le reste.
 
 ### Règles pour le prompt système — Appel 1 (extraction)
 
-- Les prix ne sont **jamais** inventés ni arrondis. Champ nul si illisible.
+- Les prix ne sont **jamais** inventés ni arrondis. Sentinelle si illisible.
+- **« Aéroport Voyage » n'est jamais un fournisseur** : c'est notre agence. Le bloc
+  signature des posts (logo, courriel, téléphone) est ignoré à l'extraction.
 - Les dates au format ISO. Année explicite obligatoire.
 - L'occupation doit être identifiée : simple, double, triple ou quadruple. C'est
   l'erreur la plus coûteuse — une cabine solo et une cabine double n'ont pas le

@@ -5,38 +5,61 @@ import { z } from "zod";
 // prix > 0) est vérifiée côté client par les refine ; les structured outputs
 // ne portent que la forme.
 //
-// IMPORTANT — champs .optional() et NON .nullable(). Les structured outputs
-// plafonnent à 16 paramètres à union (anyOf / type-array). Or .nullable() génère
-// un anyOf:[type,null] par champ : avec ~27 champs facultatifs on dépasse (400
-// « too many parameters with union types »). .optional() encode un type simple et
-// retire le champ de `required` (zéro union). Donc, ici, un fait absent du document
-// est OMIS de la sortie (undefined), il n'est jamais renvoyé à null.
-// Seuls date_depart et prix_par_personne sont requis (présents dans toute offre
-// exploitable ; sinon le modèle renvoie statut = "erreur", cf. SortieExtraction).
+// ┌─ STRATÉGIE « SENTINELLES » — lire avant de toucher à ce fichier ─────────┐
+// Les structured outputs imposent DEUX plafonds, tous deux atteints par un
+// schéma de ~40 champs facultatifs (400 à l'exécution) :
+//   • ≤ 16 paramètres à union  (.nullable() → anyOf:[type,null])
+//   • ≤ 24 paramètres facultatifs (.optional() → champ retiré de `required`)
+// Les objets IMBRIQUÉS comptent dans ces budgets.
+//
+// Règle unique retenue : presque tout est REQUIS, et « absent » s'exprime par
+// une SENTINELLE, pas par une omission ni par null :
+//   • chaîne  : z.string()        → ""  = absent
+//   • tableau : z.array(...)      → []  = absent
+//   • nombre  : .optional()       → champ OMIS (0 serait ambigu)
+//   • booléen : .optional()       → champ OMIS
+//   • objet   : .optional()       → champ OMIS (formule_secondaire, faits)
+// Une chaîne vide n'est PAS une valeur métier : la couche de conversion
+// `nettoyerSentinelles()` (lib/extraction/sentinelles.ts) transforme "" → null
+// et [] → null APRÈS le parse, avant l'écriture en base. Le schéma valide, la
+// fonction transforme — les deux ne se mélangent pas.
+// Coût : 0 union et 10 facultatifs, donc les deux plafonds sont hors de portée
+// et il reste de la marge pour les phases suivantes.
+// └──────────────────────────────────────────────────────────────────────────┘
 
-// Date ISO (YYYY-MM-DD). Les chaînes ISO se comparent lexicographiquement.
-const DateISO = z.iso.date();
+// Date ISO (AAAA-MM-JJ) avec sentinelle : "" = date absente du document.
+// Volontairement une z.string() + regex plutôt que z.iso.date() : un type JSON
+// simple, aucun `format` exotique envoyé à l'API. Les chaînes ISO se comparent
+// lexicographiquement. Aucune date n'est vitale — seul prix_par_personne l'est
+// (une offre sans prix n'est pas vendable → chemin d'erreur, pas sentinelle).
+const DateISOouVide = z
+  .string()
+  .regex(/^(\d{4}-\d{2}-\d{2})?$/, "date ISO AAAA-MM-JJ ou chaîne vide attendue");
 
-const Occupation = z.enum(["simple", "double", "triple", "quadruple"]);
-const TypeProduit = z.enum(["forfait", "croisiere", "circuit"]);
-const TypeEtablissement = z.enum(["hotel", "navire", "multiple"]);
+// Les enums portent leur propre sentinelle "" (un enum reste une chaîne, donc
+// la règle des chaînes s'applique). À noter : zodOutputFormat n'émet de toute
+// façon pas les enum en contrainte réelle (ils partent en `description`), la
+// validation des valeurs se fait donc ici, côté client.
+const Occupation = z.enum(["simple", "double", "triple", "quadruple", ""]);
+const TypeProduit = z.enum(["forfait", "croisiere", "circuit", ""]);
+const TypeEtablissement = z.enum(["hotel", "navire", "multiple", ""]);
 
 // Une « formule » = navire/hôtel + catégorie + type de cabine + dates + prix.
 // La formule PRINCIPALE est aplatie au niveau racine (mappe 1:1 aux colonnes de
 // la table offres). Une formule_secondaire présente = variante « double »
 // (comparaison de deux navires/dates, ex. post MSC SOLO).
 const Formule = z.object({
-  etablissement_nom: z.string().optional(), // navire ou hôtel
-  etablissement_type: TypeEtablissement.optional(),
-  etablissement_categorie: z.string().optional(), // VRAIE catégorie : étoiles d'hôtel, classe de navire
-  type_cabine: z.string().optional(), // "Cabine balcon", "Studio solo intérieur", "Cabine intérieure"
-  occupation: Occupation.optional(),
-  date_depart: DateISO, // toujours présent
-  date_retour: DateISO.optional(),
-  duree_nuits: z.number().int().positive().optional(),
+  etablissement_nom: z.string(), // navire ou hôtel — "" si absent
+  etablissement_type: TypeEtablissement,
+  etablissement_categorie: z.string(), // VRAIE catégorie : étoiles d'hôtel, classe de navire
+  type_cabine: z.string(), // "Cabine balcon", "Studio solo intérieur", "Cabine intérieure"
+  occupation: Occupation,
+  date_depart: DateISOouVide, // "" possible : posts « départs multiples » (cas Maroc)
+  date_retour: DateISOouVide,
+  duree_nuits: z.number().int().positive().optional(), // omis si absent (0 ambigu)
   duree_jours: z.number().int().positive().optional(),
-  prix_par_personne: z.number().positive(), // toujours présent
-  taxes_incluses: z.boolean().optional(),
+  prix_par_personne: z.number().positive(), // toujours présent, jamais de sentinelle
+  taxes_incluses: z.boolean().optional(), // omis si le document ne précise pas
 });
 
 // Complément optionnel structuré (plan boissons, wifi, crédit excursion).
@@ -50,50 +73,53 @@ const Supplement = z.object({
 // Escale de croisière ou étape de circuit.
 const Etape = z.object({
   lieu: z.string(),
-  pays: z.string().optional(),
-  jour: z.number().int().positive().optional(),
+  pays: z.string(), // "" si le pays n'est pas indiqué
+  jour: z.number().int().positive().optional(), // omis si les jours ne sont pas numérotés
 });
 
 // Objet de base (sans refine) — sert à générer le JSON Schema des structured outputs.
 export const FaitsBase = z.object({
   // ── Commun (→ colonnes offres) ──
-  type_produit: TypeProduit.optional(),
-  fournisseur: z.string().optional(),
-  destination_pays: z.string().optional(), // omis : post sans destination, croisière multi-pays
-  destination_ville: z.string().optional(),
-  devise: z.string().optional(), // défaut 'CAD' porté par la colonne DB
-  prix_valide_jusqua: DateISO.optional(),
-  compagnie_aerienne: z.string().optional(),
-  aeroport_depart: z.string().optional(), // défaut 'YUL' porté par la colonne DB
-  aeroports_alternatifs: z.array(z.string()).optional(),
-  lien_reservation: z.string().optional(),
-  lien_tripadvisor: z.string().optional(),
-  lien_monarc: z.string().optional(),
+  type_produit: TypeProduit,
+  fournisseur: z.string(),
+  destination_pays: z.string(), // "" : post sans destination, croisière multi-pays
+  destination_ville: z.string(),
+  devise: z.string(), // "" → la colonne DB applique son défaut 'CAD'
+  prix_valide_jusqua: DateISOouVide,
+  compagnie_aerienne: z.string(),
+  aeroport_depart: z.string(), // "" → la colonne DB applique son défaut 'YUL'
+  aeroports_alternatifs: z.array(z.string()), // [] si aucun départ alternatif
+  lien_reservation: z.string(),
+  lien_tripadvisor: z.string(),
+  lien_monarc: z.string(),
 
   // ── Formule principale (aplatie → colonnes offres) ──
   ...Formule.shape,
 
   // ── Variante « double » éventuelle (Formule complète) ──
-  formule_secondaire: Formule.optional(),
+  formule_secondaire: Formule.optional(), // objet entier : omis, pas de sentinelle
 
-  // ── Listes → contenus.fr ──
-  inclusions: z.array(z.string()).optional(), // règle : valeur monétaire / facturable → inclusion
-  exclusions: z.array(z.string()).optional(),
-  itineraire: z.array(Etape).optional(),
+  // ── Listes → contenus.fr ── ([] = absent)
+  inclusions: z.array(z.string()), // règle : valeur monétaire / facturable → inclusion
+  exclusions: z.array(z.string()),
+  itineraire: z.array(Etape),
 
   // ── Compléments et particularités ──
-  supplements: z.array(Supplement).optional(),
-  notes: z.array(z.string()).optional(), // règle : qualitatif → note
+  supplements: z.array(Supplement),
+  notes: z.array(z.string()), // règle : qualitatif → note
 });
 
 // Schéma complet avec cohérences métier (validation côté client, Appel 1).
+// Les comparaisons ne s'appliquent que si les DEUX dates sont présentes : une
+// sentinelle "" ne se compare pas (elle signifie « absente », pas « la plus petite »).
 export const FaitsExtraction = FaitsBase.refine(
-  (o) => o.date_retour == null || o.date_retour >= o.date_depart,
+  (o) => o.date_retour === "" || o.date_depart === "" || o.date_retour >= o.date_depart,
   { message: "date_retour antérieure à date_depart", path: ["date_retour"] },
 ).refine(
   (o) =>
     o.formule_secondaire == null ||
-    o.formule_secondaire.date_retour == null ||
+    o.formule_secondaire.date_retour === "" ||
+    o.formule_secondaire.date_depart === "" ||
     o.formule_secondaire.date_retour >= o.formule_secondaire.date_depart,
   {
     message: "date_retour secondaire incohérente",
@@ -105,11 +131,11 @@ export type Faits = z.infer<typeof FaitsBase>;
 
 // Enveloppe de sortie de l'Appel 1. Les structured outputs FORCENT la forme :
 // sans cette enveloppe, un document illisible obligerait le modèle à halluciner
-// prix_par_personne / date_depart (champs requis) pour satisfaire le schéma.
+// prix_par_personne (seul champ vital) pour satisfaire le schéma.
 // Avec statut = "erreur", le modèle signale l'échec SANS remplir les faits.
 export const SortieExtraction = z.object({
   statut: z.enum(["ok", "erreur"]),
   faits: FaitsBase.optional(), // présent si statut = "ok", omis sinon
-  erreur: z.string().optional(), // description du problème si statut = "erreur"
+  erreur: z.string(), // "" si statut = "ok" (sentinelle, cf. règle des chaînes)
 });
 export type SortieExtractionT = z.infer<typeof SortieExtraction>;

@@ -55,7 +55,8 @@ export async function extraireFaits(source: SourceExtraction): Promise<ResultatE
 
   // Le modèle a jugé le document inexploitable : on remonte son message tel quel.
   if (sortie.statut === "erreur" || !sortie.faits) {
-    return { ok: false, erreur: sortie.erreur ?? "Document inexploitable (aucune offre identifiable)." };
+    // erreur est une chaîne à sentinelle : "" = pas de message fourni.
+    return { ok: false, erreur: sortie.erreur || "Document inexploitable (aucune offre identifiable)." };
   }
 
   // Cohérence métier côté client (dates, prix). Aucune relance automatique.

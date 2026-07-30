@@ -3,51 +3,53 @@
 //
 // Pour chaque capture : appelle claude-sonnet-5 avec le VRAI prompt et le VRAI
 // schéma (structured outputs), affiche le JSON brut, joue FaitsExtraction.safeParse,
-// et vérifie que les champs nullable renvoient bien null (pas "" ni une invention).
+// vérifie l'usage des SENTINELLES ("" / [] = absent, jamais une invention), puis
+// montre le résultat après nettoyerSentinelles() — ce qui partira réellement en base.
 
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { SortieExtraction, FaitsExtraction } from "../lib/schema/offre";
+import { nettoyerSentinelles } from "../lib/extraction/sentinelles";
 import { PROMPT_SYSTEME_EXTRACTION } from "../lib/extraction/prompt";
 
 process.loadEnvFile(".env.local");
 const anthropic = new Anthropic();
 
+// Un motif facultatif limite le test à certaines captures (aucun appel inutile) :
+//   npm run test:extraction -- 141746
+const motif = process.argv[2]?.toLowerCase();
 const DOSSIER = "fixtures/posts";
 const fichiers = readdirSync(DOSSIER)
   .filter((f) => f.toLowerCase().endsWith(".png"))
+  .filter((f) => !motif || f.toLowerCase().includes(motif))
   .sort();
 
-// Champs nullable clés à surveiller (doivent être null, pas "" ni inventés, si absents).
-const NULLABLES = [
+// Champs texte scrutés : une valeur inventée y est plus coûteuse qu'ailleurs.
+const TEXTES_SURVEILLES = [
   "fournisseur",
   "destination_pays",
   "devise",
   "compagnie_aerienne",
   "aeroport_depart",
   "prix_valide_jusqua",
-  "formule_secondaire",
+  "occupation",
+  "type_produit",
+  "type_cabine",
+  "etablissement_categorie",
+  "lien_reservation",
+  "lien_tripadvisor",
+  "lien_monarc",
 ];
-
-function inspecterSchema() {
-  const fmt = zodOutputFormat(SortieExtraction) as unknown as {
-    schema?: { properties?: Record<string, unknown> };
-    json_schema?: { schema?: { properties?: Record<string, unknown> } };
-  };
-  const schema = fmt.schema ?? fmt.json_schema?.schema ?? (fmt as unknown as { properties?: unknown });
-  const props =
-    (schema as { properties?: Record<string, unknown> }).properties ?? {};
-  // faits = FaitsBase.nullable() ; on regarde comment le null est encodé.
-  const faits = props["faits"] as { properties?: Record<string, unknown> } | undefined;
-  const destination = faits?.properties?.["destination_pays"];
-  console.log("=== JSON Schema généré pour un .nullable() ===");
-  console.log("faits (FaitsBase.nullable) :", JSON.stringify(faits && Object.keys(faits).length ? Object.keys(faits) : faits));
-  console.log("faits.destination_pays (string.nullable) :", JSON.stringify(destination));
-  console.log("racine statut/faits/erreur :", JSON.stringify(Object.keys(props)));
-  console.log();
-}
+const LISTES_SURVEILLEES = [
+  "inclusions",
+  "exclusions",
+  "itineraire",
+  "supplements",
+  "notes",
+  "aeroports_alternatifs",
+];
 
 async function tester(fichier: string, i: number) {
   const b64 = readFileSync(path.join(DOSSIER, fichier)).toString("base64");
@@ -69,6 +71,7 @@ async function tester(fichier: string, i: number) {
 
   const out = r.parsed_output;
   console.log(`\n\n========== POST ${i + 1} — ${fichier} ==========`);
+  console.log("--- JSON retourné par le modèle (avec sentinelles) ---");
   console.log(JSON.stringify(out, null, 2));
 
   if (!out) {
@@ -81,28 +84,46 @@ async function tester(fichier: string, i: number) {
   }
 
   const v = FaitsExtraction.safeParse(out.faits);
-  console.log(`>>> safeParse : ${v.success ? "PASS ✅" : "FAIL ❌"}`);
+  console.log(`\n>>> safeParse : ${v.success ? "PASS" : "FAIL"}`);
   if (!v.success) {
     for (const iss of v.error.issues) {
-      console.log(`     - ${iss.path.join(".")}: ${iss.message}`);
+      console.log(`     - ${iss.path.join(".") || "(racine)"}: ${iss.message}`);
     }
   }
 
-  // Vérif nullable : null OK ; "" ou valeur douteuse à signaler.
+  // Usage des sentinelles : que vaut chaque champ surveillé, et le modèle
+  // a-t-il bien laissé "" / [] plutôt que d'inventer ou d'omettre ?
   const f = out.faits as Record<string, unknown>;
-  const suspects: string[] = [];
-  for (const champ of NULLABLES) {
+  const vides: string[] = [];
+  const remplis: string[] = [];
+  const anomalies: string[] = [];
+  for (const champ of TEXTES_SURVEILLES) {
     const val = f[champ];
-    if (val === "") suspects.push(`${champ} = "" (chaîne vide au lieu de null)`);
+    if (val === undefined) anomalies.push(`${champ} OMIS (sentinelle "" attendue)`);
+    else if (val === "") vides.push(champ);
+    else remplis.push(`${champ}=${JSON.stringify(val)}`);
   }
-  console.log(">>> nullable :", suspects.length ? suspects.join(" ; ") : "aucune chaîne vide, null respecté");
+  for (const champ of LISTES_SURVEILLEES) {
+    const val = f[champ];
+    if (val === undefined) anomalies.push(`${champ} OMIS (sentinelle [] attendue)`);
+    else if (Array.isArray(val) && val.length === 0) vides.push(champ);
+    else if (Array.isArray(val)) remplis.push(`${champ}[${val.length}]`);
+  }
+  console.log(`>>> sentinelles vides ("" / []) : ${vides.length ? vides.join(", ") : "aucune"}`);
+  console.log(`>>> champs renseignés : ${remplis.join("  ") || "aucun"}`);
+  console.log(`>>> anomalies : ${anomalies.length ? anomalies.join(" ; ") : "aucune"}`);
   console.log(
-    `     fournisseur=${JSON.stringify(f.fournisseur)}  devise=${JSON.stringify(f.devise)}  aeroport_depart=${JSON.stringify(f.aeroport_depart)}  destination_pays=${JSON.stringify(f.destination_pays)}  formule_secondaire=${f.formule_secondaire === null ? "null" : "présente"}`,
+    `>>> formule_secondaire : ${f.formule_secondaire === undefined ? "omise" : "présente"}`,
   );
+
+  if (v.success) {
+    console.log("\n--- Après nettoyerSentinelles() (ce qui part en base) ---");
+    console.log(JSON.stringify(nettoyerSentinelles(v.data), null, 2));
+  }
 }
 
 async function main() {
-  inspecterSchema();
+  console.log(`${fichiers.length} capture(s) : ${fichiers.join(", ")}`);
   for (let i = 0; i < fichiers.length; i++) {
     await tester(fichiers[i], i);
   }

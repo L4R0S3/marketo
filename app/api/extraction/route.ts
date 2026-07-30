@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { extraireFaits, type SourceExtraction } from "@/lib/extraction/client";
+import { nettoyerSentinelles } from "@/lib/extraction/sentinelles";
 
 export const runtime = "nodejs"; // Buffer + SDK Anthropic
 export const maxDuration = 60; // l'extraction peut prendre ~15 s
@@ -84,7 +85,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: resultat.erreur }, { status: 422 });
   }
 
-  const faits = resultat.faits;
+  // Couche de conversion : "" → null et [] → null, APRÈS le parse et avant toute
+  // écriture. Le modèle signale un fait absent par une sentinelle (cf. l'encadré
+  // de lib/schema/offre.ts) ; la base, elle, ne connaît que NULL.
+  const faits = nettoyerSentinelles(resultat.faits);
 
   // extraction_brute : objet à deux clés { extraction, composition }. On n'écrase
   // jamais la clé composition. On mappe la formule principale + les champs communs
@@ -92,16 +96,17 @@ export async function POST(request: NextRequest) {
   // listes) reste dans extraction_brute.extraction pour la phase 3.
   const extractionBrute = { ...base, extraction: faits };
 
-  // Les faits absents sont undefined (schéma .optional()). On pose un null explicite
-  // en colonne (?? null) pour ne pas laisser de valeur périmée sur une ré-extraction.
-  // Exceptions devise / aeroport_depart : on laisse undefined (champ non envoyé dans
-  // l'UPDATE) pour PRÉSERVER les défauts DB 'CAD' / 'YUL'.
+  // Après conversion, un fait absent vaut null (chaînes, listes) ou undefined
+  // (nombres et booléens, simplement omis). Le `?? null` uniformise pour ne pas
+  // laisser de valeur périmée sur une ré-extraction. Exceptions devise /
+  // aeroport_depart : undefined = champ non envoyé dans l'UPDATE, ce qui PRÉSERVE
+  // les défauts DB 'CAD' / 'YUL'.
   const maj: Record<string, unknown> = {
     type_produit: faits.type_produit ?? null,
     fournisseur: faits.fournisseur ?? null,
     destination_pays: faits.destination_pays ?? null,
     destination_ville: faits.destination_ville ?? null,
-    date_depart: faits.date_depart,
+    date_depart: faits.date_depart ?? null, // "" → null : post « départs multiples »
     date_retour: faits.date_retour ?? null,
     duree_nuits: faits.duree_nuits ?? null,
     duree_jours: faits.duree_jours ?? null,
