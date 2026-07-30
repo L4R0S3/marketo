@@ -1,12 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Check, Copy, Download, ExternalLink, Mail, RefreshCw } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  Check,
+  Copy,
+  Download,
+  ExternalLink,
+  Globe,
+  Mail,
+  RefreshCw,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { ApercuCourriel } from "@/components/ApercuCourriel";
 import { CopierHtml } from "@/components/CopierHtml";
+import { archiverOffre, publierOffre } from "../actions";
 import {
   Card,
   CardContent,
@@ -25,7 +46,7 @@ export function EtapeSorties({
   titre,
   accroche,
   courrielHtml,
-  publiee,
+  statut,
   urlPublique,
 }: {
   offreId: string;
@@ -33,12 +54,26 @@ export function EtapeSorties({
   titre: string;
   accroche: string;
   courrielHtml: string | null;
-  publiee: boolean;
+  statut: string;
   urlPublique: string;
 }) {
+  const router = useRouter();
   const [copie, setCopie] = useState(false);
   const [version, setVersion] = useState(0); // force le rechargement de l'image
+  const [enCours, demarrer] = useTransition();
+  const [message, setMessage] = useState<string | null>(null);
   const url = `/api/og/${offreId}?v=${version}`;
+
+  const publiee = statut === "publiee";
+  const validee = statut === "validee";
+  const archivee = statut === "archivee";
+
+  const agir = (action: () => Promise<{ error: string } | { ok: true; message: string }>) =>
+    demarrer(async () => {
+      const r = await action();
+      setMessage("error" in r ? r.error : r.message);
+      router.refresh();
+    });
 
   async function copier() {
     await navigator.clipboard.writeText(accroche);
@@ -144,7 +179,7 @@ export function EtapeSorties({
           </CardContent>
         </Card>
 
-        {/* Landing page */}
+        {/* Landing page et publication */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -154,25 +189,70 @@ export function EtapeSorties({
             <CardDescription>
               {publiee
                 ? "En ligne : c'est la page vers laquelle pointent le post et le courriel."
-                : "L'offre doit être publiée pour que cette page réponde."}
+                : archivee
+                  ? "Archivée : la page ne répond plus. Le lien reste réservé à cette offre."
+                  : "L'offre doit être publiée pour que cette page réponde."}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <code className="rounded-md bg-muted/50 p-3 text-xs break-all">{urlPublique}</code>
-            <div className="flex flex-wrap gap-2">
-              <Button asChild variant="outline" disabled={!publiee}>
-                <a href={`/voyage/${slug}`} target="_blank" rel="noreferrer">
-                  Ouvrir la page
-                </a>
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => navigator.clipboard.writeText(urlPublique)}
-              >
-                Copier le lien
-              </Button>
-            </div>
+
+            {validee && (
+              <>
+                <Button type="button" disabled={enCours} onClick={() => agir(() => publierOffre(offreId))}>
+                  <Globe className="size-4" />
+                  {enCours ? "Publication…" : "Publier l'offre"}
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  La publication met la page en ligne et <strong>fige l&apos;adresse</strong> :
+                  elle ne pourra plus changer, même après archivage.
+                </p>
+              </>
+            )}
+
+            {publiee && (
+              <div className="flex flex-wrap gap-2">
+                <Button asChild>
+                  <a href={`/voyage/${slug}`} target="_blank" rel="noreferrer">
+                    <ExternalLink className="size-4" />
+                    Ouvrir la page
+                  </a>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => navigator.clipboard.writeText(urlPublique)}
+                >
+                  Copier le lien
+                </Button>
+
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button type="button" variant="ghost" disabled={enCours}>
+                      Dépublier
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Dépublier cette offre ?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Elle passe au statut archivé et disparaît immédiatement de la page
+                        publique : le lien qui circule dans les posts et les courriels ne
+                        répondra plus. L&apos;offre et son contenu sont conservés.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Annuler</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => agir(() => archiverOffre(offreId))}>
+                        Dépublier et archiver
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            )}
+
+            {message && <p className="text-sm">{message}</p>}
           </CardContent>
         </Card>
       </div>

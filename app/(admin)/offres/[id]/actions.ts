@@ -158,6 +158,75 @@ export async function validerOffre(offreId: string, donnees: unknown): Promise<R
   return { ok: true, message: "Offre validée." };
 }
 
+// ── Publication ────────────────────────────────────────────────────────────
+// validee → publiee. Le trigger gel_slug de la migration 0002 fige le slug à ce
+// moment précis et refusera toute modification ultérieure : c'est pourquoi la
+// validation, qui régénère le slug depuis le titre, doit passer AVANT.
+export async function publierOffre(offreId: string): Promise<Resultat> {
+  const supabase = await session();
+  if (!supabase) return { error: "Session expirée." };
+
+  const { data: offre } = await supabase
+    .from("offres")
+    .select("statut, slug, contenus")
+    .eq("id", offreId)
+    .single();
+  if (!offre) return { error: "Offre introuvable." };
+  if (offre.statut !== "validee")
+    return { error: `Seule une offre validée peut être publiée (statut actuel : ${offre.statut}).` };
+
+  const fr = ((offre.contenus as Record<string, unknown> | null)?.fr ?? {}) as Record<
+    string,
+    unknown
+  >;
+  if (!fr.visuel)
+    return { error: "Aucun visuel validé : repasse par l'étape Visuel avant de publier." };
+
+  const { error } = await supabase
+    .from("offres")
+    .update({ statut: "publiee", modifie_le: new Date().toISOString() })
+    .eq("id", offreId)
+    .eq("statut", "validee"); // garde : personne d'autre n'a changé le statut entre-temps
+  if (error) return { error: `Publication échouée : ${error.message}` };
+
+  // La landing page est générée statiquement : sans cette revalidation, elle
+  // resterait absente jusqu'au prochain déploiement.
+  revalidatePath(`/voyage/${offre.slug as string}`);
+  revalidatePath(`/offres/${offreId}`, "layout");
+  revalidatePath("/offres");
+  return { ok: true, message: `Offre publiée : /voyage/${offre.slug as string}` };
+}
+
+// ── Dépublication (publiee → archivee) ─────────────────────────────────────
+// La vue offres_publiques ne montre que le statut « publiee » : l'offre
+// disparaît donc de la page publique dès la revalidation. Le slug reste gelé,
+// même archivé — une URL qui a circulé ne doit jamais être réattribuée.
+export async function archiverOffre(offreId: string): Promise<Resultat> {
+  const supabase = await session();
+  if (!supabase) return { error: "Session expirée." };
+
+  const { data: offre } = await supabase
+    .from("offres")
+    .select("statut, slug")
+    .eq("id", offreId)
+    .single();
+  if (!offre) return { error: "Offre introuvable." };
+  if (offre.statut !== "publiee")
+    return { error: "Seule une offre publiée peut être dépubliée." };
+
+  const { error } = await supabase
+    .from("offres")
+    .update({ statut: "archivee", modifie_le: new Date().toISOString() })
+    .eq("id", offreId)
+    .eq("statut", "publiee");
+  if (error) return { error: `Dépublication échouée : ${error.message}` };
+
+  revalidatePath(`/voyage/${offre.slug as string}`);
+  revalidatePath(`/offres/${offreId}`, "layout");
+  revalidatePath("/offres");
+  return { ok: true, message: "Offre dépubliée et archivée." };
+}
+
 // ── Retour en brouillon ────────────────────────────────────────────────────
 export async function repasserEnBrouillon(offreId: string): Promise<Resultat> {
   const supabase = await session();

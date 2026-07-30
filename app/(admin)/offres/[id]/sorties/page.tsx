@@ -41,7 +41,7 @@ export default async function PageSorties({
       titre={(fr?.titre as string) ?? ""}
       accroche={(fr?.accroche as string) ?? ""}
       courrielHtml={courriel?.html ?? null}
-      publiee={offre.statut === "publiee"}
+      statut={offre.statut as string}
       urlPublique={`${SITE_URL}/voyage/${offre.slug as string}`}
     />
   );
