@@ -442,7 +442,17 @@ objets **imbriqués comptent** dans les deux.
 | Budget | Plafond | Ce qui le consomme |
 |---|---|---|
 | Paramètres à union | 16 | `.nullable()` → `anyOf: [type, null]` |
-| Paramètres facultatifs | 24 | `.optional()` → champ retiré de `required` |
+| Paramètres facultatifs | **14** | `.optional()` → champ retiré de `required` |
+
+> **Le plafond des facultatifs était annoncé à 24 ; il est à 14.** Corrigé le 5 août 2026,
+> mesuré champ par champ contre l'API : à **16** facultatifs elle refuse de compiler la
+> grammaire (« Schema is too complex », puis « Grammar compilation timed out »), après 135
+> à 182 secondes d'attente ; à **14** elle compile en 2,8 s. Ce n'est pas une question de
+> taille — la variante qui passe fait 4299 caractères, celle qui échoue 4269.
+> Une variante « 0 = absent » sur les nombres (5 facultatifs) compile aussi, mais en 107 s :
+> écartée, trop près du bord. Le dépassement ne se voit **qu'à l'exécution**, sur une vraie
+> extraction, plusieurs minutes plus tard — d'où `npm run test:schema`, qui échoue au-delà
+> de 14. Tout nouveau champ facultatif se paie par le retrait d'un autre.
 
 Le schéma des faits en comptait ~40 : aucune extraction ne partait (400). Règle retenue,
 **unique et sans exception** : presque tout est **requis**, et « absent » s'exprime par une
@@ -456,9 +466,14 @@ Le schéma des faits en comptait ~40 : aucune extraction ne partait (400). Règl
 | Booléen | `.optional()` | champ omis |
 | Objet (`formule_secondaire`, `faits`) | `.optional()` | champ omis |
 
-Coût final : **0 union et 10 facultatifs** — vérifiable à tout moment par
-`npm run test:schema`, qui compte les deux budgets sur le JSON Schema réellement généré.
-Relance-le après **toute** modification de `lib/schema/offre.ts`.
+Coût final : **0 union et 14 facultatifs** — soit pile le plafond — vérifiable à tout
+moment par `npm run test:schema`, qui compte les deux budgets sur le JSON Schema réellement
+généré. Relance-le après **toute** modification de `lib/schema/offre.ts`.
+
+`prix_avant_rabais` (prix barré du courriel) est **hors du schéma d'extraction** pour cette
+raison : ses deux occurrences portaient le compte à 16. La colonne existe, c'est l'opérateur
+qui la saisit à l'étape Faits, et la route d'extraction ne l'écrit jamais — sinon une
+ré-extraction effacerait la saisie.
 
 `prix_par_personne` est le **seul** champ sans valeur d'absence : une offre sans prix
 n'est pas vendable, donc prix illisible → `statut = "erreur"`. **`date_depart` a une

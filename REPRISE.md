@@ -3,7 +3,7 @@
 > Document de passation, tenu à jour à la main. `CLAUDE.md` reste la **spécification**
 > (ce qu'on veut) ; ce fichier dit **où on en est** et **ce qui reste**.
 >
-> Dernière mise à jour : 30 juillet 2026.
+> Dernière mise à jour : 5 août 2026.
 
 ## En un coup d'œil
 
@@ -15,21 +15,59 @@ page publiée.
 |---|---|
 | 0 — Initialisation, Supabase, auth | fait, validé |
 | 1 — Ingestion (dépôt fichier / URL, photos) | fait |
-| 2 — Extraction IA (2 appels) | fait, testé en réel sur 5 documents |
+| 2 — Extraction IA (2 appels) | fait, testé en réel sur 5 documents ; plafond de schéma à 14 facultatifs |
 | 3 — Écran de validation | fait |
 | 4 — Post social (Satori + frames PNG) | fait, testé en réel |
 | 5 — Courriel MJML + campagnes | fait |
 | 6 — Landing pages + publication | fait, testé en réel |
 
+## Parcours complet vérifié en production — 5 août 2026
+
+Déroulé de bout en bout sur `marketo-ochre.vercel.app`, par clics réels dans un vrai
+navigateur, avec une vraie capture Sirev et un compte jetable : dépôt → extraction →
+faits → composition → photo hero → validation → PNG → publication → page publique en 200
+pour un visiteur anonyme. Puis ménage complet (offre, fichiers, compte).
+
+Deux défauts trouvés en chemin, **tous deux corrigés** (commit `2d60165`) :
+
+1. **L'API refusait le schéma d'extraction** — « Schema is too complex », puis « Grammar
+   compilation timed out », après 135 à 182 secondes d'attente. Cause : `prix_avant_rabais`,
+   ajouté en phase 5 et jamais exercé par une extraction depuis, portait le compte de
+   paramètres facultatifs de 14 à 16. **Le plafond réel est 14, pas 24** — voir l'encadré
+   de `CLAUDE.md` §8 et l'en-tête de `lib/schema/offre.ts`. Le champ sort du schéma ;
+   l'opérateur le saisit à l'étape Faits, où il existait déjà.
+2. **`/api/extraction` était coupée à 60 s** (`maxDuration = 60`) alors que Vercel accorde
+   **300 s par défaut sur tous les forfaits** depuis Fluid Compute. Le plafond venait de
+   notre code. Indispensable même avec un schéma sain : **la première extraction après tout
+   changement de schéma paie la compilation de la grammaire — 103 s mesurées**, puis 24 s
+   une fois en cache côté API (24 h).
+
+Plus un correctif de confort : le client faisait `res.json()` sans garde, donc une réponse
+non-JSON de la plateforme s'affichait en « Unexpected token 'A'… ». `lib/extraction/appelClient.ts`
+lit le corps en texte, tente le JSON, et nomme explicitement le cas 504.
+
 ## Ce qui reste à faire
 
-1. **Déploiement Vercel — deux réglages à finir** (voir la section dédiée plus bas).
-2. **Tester le parcours complet en ligne**, une fois le déploiement sain.
-3. **Phase 4, points de marque restés ouverts** : les frames `framboise` et `ambre` de
+1. **Phase 4, points de marque restés ouverts** : les frames `framboise` et `ambre` de
    la série d'origine n'existent pas ; il y a aujourd'hui sept thèmes (azur, sarcelle,
    lagon, menthe, olive, prune, framboise). La signature vient des frames, plus du code.
-4. **Confort** : le bouton « régénérer le texte » ne conserve pas les retouches manuelles,
+2. **Confort** : le bouton « régénérer le texte » ne conserve pas les retouches manuelles,
    il remplace tout — comportement voulu, mais à surveiller à l'usage.
+3. **À surveiller** : l'extraction déduit `compagnie_aerienne = "Air Transat"` d'un code
+   de vol TS398. Déduction juste, mais non écrite telle quelle dans le document — à
+   trancher si on veut du strict littéral.
+
+## Piège : supprimer une offre publiée hors de l'application
+
+Une page de destination est générée **statiquement**. Supprimer la ligne `offres`
+directement en base (service_role, console SQL) n'appelle aucun `revalidatePath` : la page
+publique **continue de répondre 200** avec son contenu figé, alors que sa donnée n'existe
+plus. Vérifié le 5 août. Un redéploiement la fait disparaître (elle sort de
+`generateStaticParams`, puis `dynamicParams` la rend à la demande → 404).
+
+L'interface ne permet pas ce cas : `supprimerOffre` est réservée aux brouillons. Le chemin
+propre reste **Dépublier** (`publiee → archivee`, qui revalide), et la suppression directe
+est à réserver aux données de test — suivie d'un redéploiement.
 
 ## Commandes utiles
 
@@ -141,15 +179,22 @@ Réglage critique qui vit **hors du dépôt** : « Allow new users to sign up »
 - Dépôt : **github.com/L4R0S3/marketo**, branche `master`
 - Domaine : `marketo-ochre.vercel.app`
 
-### Deux réglages restent à finir
+### Réglages : les deux blocages sont levés
 
-1. **Branche de production.** Vercel ne considère pas `master` comme la branche de
-   production : une poussée y crée un déploiement d'**aperçu**. À corriger dans
-   *Settings → Git → Production Branch* (mettre `master`), ou renommer la branche en `main`.
-2. **Protection de déploiement.** *Settings → Deployment Protection → Vercel Authentication*
-   doit être **désactivée** (ou limitée aux aperçus) pour que les landing pages soient
-   visibles du public. Sans cela, un client cliquant un lien de courriel tombe sur une page
-   de connexion Vercel.
+Vérifié le 5 août : une poussée sur `master` crée bien un déploiement de **production**, et
+les pages de destination répondent 200 à un visiteur anonyme — la protection de déploiement
+ne bloque plus rien. Les deux points ouverts au 30 juillet sont donc réglés.
+
+`npx vercel --prod --yes` reste le moyen de forcer un déploiement de production sans passer
+par une poussée (utile pour purger une page statique orpheline, cf. plus haut).
+
+### Durée d'exécution des fonctions
+
+**Ne pas remettre un `maxDuration` bas.** Vercel accorde **300 s par défaut sur tous les
+forfaits** depuis Fluid Compute ; `/api/extraction` déclare donc 300. Un plafond à 60 s
+coupait l'extraction en `FUNCTION_INVOCATION_TIMEOUT`, d'autant que la **première** extraction
+après un changement de schéma paie la compilation de la grammaire — 103 s mesurées, contre
+24 s ensuite (cache API de 24 h).
 
 ### Piège déjà rencontré, déjà corrigé
 
