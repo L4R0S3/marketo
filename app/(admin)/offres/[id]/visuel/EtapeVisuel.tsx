@@ -9,6 +9,7 @@ import {
   visuelFormVersPostVisuel,
   type VisuelFormT,
 } from "@/lib/schema/formulaire";
+import { lancerEtapeIA } from "@/lib/extraction/appelClient";
 import { LIMITES } from "@/lib/templates/social/schema";
 import { LIMITES_TEXTE } from "@/lib/composition/schema";
 import { THEMES, NOMS_THEMES } from "@/lib/templates/social/themes";
@@ -104,23 +105,13 @@ export function EtapeVisuel({
   async function composer() {
     setComposition("encours");
     setErreurIA(null);
-    try {
-      const res = await fetch("/api/extraction", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ offreId, etape: "composition" }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setErreurIA(json.error ?? "Composition échouée.");
-        setComposition("attente");
-      } else {
-        setComposition("faite");
-        router.refresh();
-      }
-    } catch (e) {
-      setErreurIA(e instanceof Error ? e.message : "Échec réseau.");
+    const erreur = await lancerEtapeIA(offreId, "composition");
+    if (erreur) {
+      setErreurIA(erreur);
       setComposition("attente");
+    } else {
+      setComposition("faite");
+      router.refresh();
     }
   }
 

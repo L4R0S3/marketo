@@ -5,7 +5,11 @@ import { nettoyerSentinelles } from "@/lib/extraction/sentinelles";
 import { composerTexte, type FaitsPourComposition } from "@/lib/composition/client";
 
 export const runtime = "nodejs"; // Buffer + SDK Anthropic
-export const maxDuration = 60; // l'extraction peut prendre ~15 s
+// Vercel accorde 300 s par défaut sur tous les forfaits (Fluid Compute) ; le
+// plafond de 60 s qu'on s'imposait ici coupait l'extraction en plein vol
+// (FUNCTION_INVOCATION_TIMEOUT vu en production). Un appel modèle avec image
+// dépasse régulièrement la minute — on prend la marge que la plateforme offre.
+export const maxDuration = 300;
 
 // Colonnes de faits relues pour l'Appel 2. On part des COLONNES, pas de
 // extraction_brute : en phase 3 l'opérateur y aura corrigé les faits, et la
@@ -146,7 +150,9 @@ async function etapeExtraction(supabase: Supabase, offreId: string) {
     prix_par_personne: faits.prix_par_personne,
     prix_base: faits.prix_base ?? null,
     taxes: faits.taxes ?? null,
-    prix_avant_rabais: faits.prix_avant_rabais ?? null,
+    // prix_avant_rabais absent d'ici volontairement : ce champ appartient à
+    // l'opérateur (étape Faits). L'écrire ici effacerait sa saisie à chaque
+    // ré-extraction.
     occupation: faits.occupation ?? null,
     taxes_incluses: faits.taxes_incluses ?? null,
     prix_valide_jusqua: faits.prix_valide_jusqua ?? null,

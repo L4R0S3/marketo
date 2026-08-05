@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FaitsForm, type FaitsFormT } from "@/lib/schema/formulaire";
+import { lancerEtapeIA } from "@/lib/extraction/appelClient";
 import { ChevronDown, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -174,23 +175,13 @@ export function EtapeFaits({
   async function lancerExtraction() {
     setExtraction("encours");
     setErreurIA(null);
-    try {
-      const res = await fetch("/api/extraction", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ offreId, etape: "extraction" }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setErreurIA(json.error ?? "Extraction échouée.");
-        setExtraction("attente");
-      } else {
-        setExtraction("faite");
-        router.refresh();
-      }
-    } catch (e) {
-      setErreurIA(e instanceof Error ? e.message : "Échec réseau.");
+    const erreur = await lancerEtapeIA(offreId, "extraction");
+    if (erreur) {
+      setErreurIA(erreur);
       setExtraction("attente");
+    } else {
+      setExtraction("faite");
+      router.refresh();
     }
   }
 

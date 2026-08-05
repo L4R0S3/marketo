@@ -23,8 +23,21 @@ import { z } from "zod";
 // `nettoyerSentinelles()` (lib/extraction/sentinelles.ts) transforme "" → null
 // et [] → null APRÈS le parse, avant l'écriture en base. Le schéma valide, la
 // fonction transforme — les deux ne se mélangent pas.
-// Coût : 0 union et 10 facultatifs, donc les deux plafonds sont hors de portée
-// et il reste de la marge pour les phases suivantes.
+//
+// ⚠ PLAFOND RÉEL, MESURÉ LE 5 AOÛT 2026 — bien plus bas que les 24 annoncés.
+// L'ajout de `prix_avant_rabais` (2 occurrences : formule principale +
+// formule_secondaire) a porté le compte de 14 à 16 facultatifs, et l'API a
+// refusé de compiler la grammaire : « Schema is too complex », puis « Grammar
+// compilation timed out » — après 135 à 182 secondes d'attente. Mesures :
+//   14 facultatifs → compile en 2,8 s ;  16 facultatifs → refus.
+// Ce n'est PAS une question de taille : la variante qui passe fait 4299
+// caractères, celle qui échoue 4269.
+// Une variante « 0 = absent » sur les nombres (5 facultatifs seulement) compile,
+// mais en 107 s : écartée, trop près du bord.
+// RÈGLE : ne pas dépasser 14 paramètres facultatifs. Tout nouveau champ
+// facultatif se paie par le retrait d'un autre, et `npm run test:schema` le
+// vérifie. Un dépassement ne se voit qu'à l'exécution, sur une vraie
+// extraction, plusieurs minutes plus tard.
 // └──────────────────────────────────────────────────────────────────────────┘
 
 // Date ISO (AAAA-MM-JJ) avec sentinelle : "" = date absente du document.
@@ -65,9 +78,10 @@ const Formule = z.object({
   prix_par_personne: z.number().positive(), // toujours présent, jamais de sentinelle
   prix_base: z.number().positive().optional(), // prix avant taxes, omis si absent
   taxes: z.number().positive().optional(), // montant des taxes, omis si absent
-  // Tarif régulier annoncé barré (« rabais de 510 $ », « avant 2255 $ »). Sert
-  // au prix barré du bloc courriel ; omis si le document n'en annonce pas.
-  prix_avant_rabais: z.number().positive().optional(),
+  // PAS de prix_avant_rabais ici : voir l'encadré « plafond réel » plus haut.
+  // La colonne existe (migration 0007) et alimente le prix barré du courriel,
+  // mais c'est l'opérateur qui la saisit à l'étape Faits — l'extraction n'y
+  // touche jamais.
   taxes_incluses: z.boolean().optional(), // ce que dit le document, pour la traçabilité
 });
 

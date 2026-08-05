@@ -1,8 +1,13 @@
 // Compte les deux budgets des structured outputs sur le JSON Schema RÉELLEMENT
 // généré (pas sur une lecture à l'œil du fichier Zod) :
 //   • paramètres à union      → plafond 16   (anyOf / oneOf / "type": [..])
-//   • paramètres facultatifs  → plafond 24   (propriété absente de `required`)
+//   • paramètres facultatifs  → plafond 14   (propriété absente de `required`)
 // Les objets imbriqués comptent. Aucun appel API : lance : npm run test:schema
+//
+// Le plafond des facultatifs était fixé à 24 d'après une première mesure ; il a
+// été ramené à 14 le 5 août 2026, mesuré contre l'API : à 16, la compilation de
+// la grammaire est REFUSÉE (« Schema is too complex » / « Grammar compilation
+// timed out »), à 14 elle passe en 2,8 s. Voir l'encadré de lib/schema/offre.ts.
 
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { SortieExtraction } from "../lib/schema/offre";
@@ -51,7 +56,7 @@ function mesurer(titre: string, format: unknown) {
   console.log(`=== ${titre} ===`);
   console.log(`Paramètres à UNION       : ${unions.length} / 16  ${unions.length <= 16 ? "OK" : "DÉPASSÉ"}`);
   if (unions.length) console.log("  " + unions.join("\n  "));
-  console.log(`Paramètres FACULTATIFS   : ${facultatifs.length} / 24  ${facultatifs.length <= 24 ? "OK" : "DÉPASSÉ"}`);
+  console.log(`Paramètres FACULTATIFS   : ${facultatifs.length} / 14  ${facultatifs.length <= 14 ? "OK" : "DÉPASSÉ"}`);
   if (facultatifs.length) console.log("  " + facultatifs.join("\n  "));
   console.log(`JSON Schema : ${JSON.stringify(schema).length} caractères.\n`);
 }
